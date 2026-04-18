@@ -1,9 +1,9 @@
 {
   "id": "preach-md",
   "name": "Preach MD",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "minAppVersion": "1.4.0",
-  "description": "Distraction-free preach mode for sermon notes. Optimised for iPad delivery.",
+  "description": "Full-screen preach mode for delivering sermons from iPad. Free scroll, scripture tap-to-expand, timer, outline navigation.",
   "author": "Don",
   "isDesktopOnly": false
 }
