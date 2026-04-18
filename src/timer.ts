@@ -176,7 +176,7 @@ export class PreachTimer {
 		if (this.runState === "idle") {
 			this.labelEl.textContent = "Tap to start";
 		} else if (this.runState === "running") {
-			this.labelEl.textContent = "Tap to pause  |  Double-tap to reset";
+			this.labelEl.textContent = "Tap to pause";
 		} else {
 			this.labelEl.textContent = "Tap to resume  |  Double-tap to reset";
 		}
