@@ -17,22 +17,18 @@ Inspired by the Preach function in Logos Bible Software.
 - **Live timer** - elapsed time with configurable amber and red thresholds
 - **Screen wake lock** - keeps the display on while preach mode is active
 - **Edge-swipe suppression** - prevents accidental sidebar openings
-- **Paragraph highlighting** - bottom-left button enables highlight mode; tap any paragraph to wrap it in `==...==` (persisted to the source file); tap again to remove
 - **Scripture tap-to-expand** - Bible references (e.g. `John 3:16`, `Rom 8:28-30`) are detected automatically; tap one to expand the passage inline from your vault Bible files; tap again to collapse
 
 ---
 
-## Install via BRAT
+## Install
 
-[BRAT](https://github.com/TfTHacker/obsidian42-brat) (Beta Reviewer's Auto-update Tool) lets you install unreleased plugins directly from a GitHub repository.
+1. Open Obsidian Settings.
+2. Go to **Community plugins** and click **Browse**.
+3. Search for **Preach MD**.
+4. Click **Install**, then **Enable**.
 
-1. Install the **Obsidian42 - BRAT** plugin from the Obsidian community plugins list.
-2. Open BRAT settings and click **Add Beta Plugin**.
-3. Enter the repository URL: `overmoro/preach-md`
-4. Click **Add Plugin**. BRAT will download and install it.
-5. Enable **Preach MD** in Settings > Community plugins.
-
-To update: open BRAT settings and click **Check for updates**.
+Alternatively, on iPad: Settings → Community plugins → Browse → search "Preach MD" → Install → Enable.
 
 ---
 
@@ -48,9 +44,8 @@ To update: open BRAT settings and click **Check for updates**.
 |---|---|---|
 | Top-left | Outline | Shows section headings. Tap a heading to jump. |
 | Top-right | Exit | First tap shows "Exit?", second tap within 3s closes. |
-| Top-centre | Timer | Elapsed time. Tap to reset (two-step). |
+| Top-centre | Timer | Countdown from target duration. Single tap pauses/resumes. Double-tap resets. Counts up in red after reaching zero. |
 | Bottom-right | Edit | Switches to edit mode at the current scroll position. |
-| Bottom-left | Highlight | Toggles highlight mode (yellow when on). In highlight mode, tap any paragraph to add or remove `==...==` highlighting. |
 
 ### Scripture expansion
 
