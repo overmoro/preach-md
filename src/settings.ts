@@ -6,9 +6,7 @@ export interface PreachMDSettings {
 	warnMinutes: number;
 	critMinutes: number;
 	sectionHeadingLevel: number;
-	// Session 2 stubs (not yet active):
-	// csbFolderPath: string;
-	// highlightColour: string;
+	csbFolderPath: string;
 }
 
 export const DEFAULT_SETTINGS: PreachMDSettings = {
@@ -16,6 +14,7 @@ export const DEFAULT_SETTINGS: PreachMDSettings = {
 	warnMinutes: 5,
 	critMinutes: 1,
 	sectionHeadingLevel: 2,
+	csbFolderPath: "30_Knowledge/Theology/Bible/CSB",
 };
 
 export class PreachMDSettingTab extends PluginSettingTab {
@@ -104,29 +103,22 @@ export class PreachMDSettingTab extends PluginSettingTab {
 					})
 			);
 
-		// Session 2 stubs (shown as disabled/informational)
-		containerEl.createEl("h3", { text: "Scripture (coming soon)" });
+		// Scripture
+		containerEl.createEl("h3", { text: "Scripture" });
 
 		new Setting(containerEl)
-			.setName("CSB Bible folder path")
+			.setName("Bible folder path")
 			.setDesc(
-				"Vault path to CSB chapter files. Available in a future update."
+				"Vault-relative path to your Bible chapter files. Each book should be a folder with files named like 'John 3.md'."
 			)
-			.setDisabled(true)
 			.addText((text) =>
 				text
 					.setPlaceholder("30_Knowledge/Theology/Bible/CSB")
-					.setDisabled(true)
-			);
-
-		containerEl.createEl("h3", { text: "Highlights (coming soon)" });
-
-		new Setting(containerEl)
-			.setName("Highlight colour")
-			.setDesc("Colour used for paragraph highlights. Available in a future update.")
-			.setDisabled(true)
-			.addText((text) =>
-				text.setPlaceholder("#ffe066").setDisabled(true)
+					.setValue(this.plugin.settings.csbFolderPath)
+					.onChange(async (value) => {
+						this.plugin.settings.csbFolderPath = value.trim();
+						await this.plugin.saveSettings();
+					})
 			);
 	}
 }

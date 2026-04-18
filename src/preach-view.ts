@@ -7,6 +7,8 @@ import {
 } from "obsidian";
 import type PreachMDPlugin from "./main";
 import { PreachTimer } from "./timer";
+import { HighlightManager, parseBlocks } from "./highlight";
+import { ScriptureExpander } from "./scripture";
 
 export const PREACH_VIEW_TYPE = "preach-md-view";
 
@@ -59,6 +61,7 @@ export class PreachView extends ItemView {
 	private editBtn!: HTMLElement;
 	private overlayEl!: HTMLElement;
 	private exitChip!: HTMLElement;
+	private highlightBtn!: HTMLElement;
 
 	// Timer
 	private timer!: PreachTimer;
@@ -75,6 +78,10 @@ export class PreachView extends ItemView {
 
 	// Component used by MarkdownRenderer
 	private renderComponent!: Component;
+
+	// Feature managers
+	private highlightManager!: HighlightManager;
+	private scriptureExpander!: ScriptureExpander;
 
 	constructor(leaf: WorkspaceLeaf, plugin: PreachMDPlugin) {
 		super(leaf);
@@ -96,6 +103,17 @@ export class PreachView extends ItemView {
 	async onOpen(): Promise<void> {
 		this.renderComponent = new Component();
 		this.renderComponent.load();
+
+		this.highlightManager = new HighlightManager(
+			this.app,
+			this.file ?? ({} as TFile),
+			this.renderComponent
+		);
+		this.scriptureExpander = new ScriptureExpander(
+			this.app,
+			this.plugin.settings.csbFolderPath
+		);
+
 		this.buildUI();
 		await this.requestWakeLock();
 		this.suppressEdgeSwipes();
@@ -116,6 +134,9 @@ export class PreachView extends ItemView {
 
 	async setFile(file: TFile): Promise<void> {
 		this.file = file;
+		if (this.highlightManager) {
+			this.highlightManager.updateFile(file);
+		}
 		if (this.scrollEl) {
 			await this.renderFile(file);
 		}
@@ -195,10 +216,30 @@ export class PreachView extends ItemView {
 			this.goToEdit();
 		});
 
-		// Bottom-left: reserved for highlight toggle (Session 2)
-		corners.createEl("div", {
-			cls: "preach-corner preach-corner--bottom-left preach-corner--reserved",
+		// Bottom-left: highlight toggle
+		this.highlightBtn = corners.createEl("button", {
+			cls: "preach-corner preach-corner--bottom-left preach-highlight-btn",
+			attr: {
+				"aria-label": "Toggle paragraph highlight",
+				title: "Highlight",
+				"aria-pressed": "false",
+			},
 		});
+		// Lucide highlighter icon
+		this.highlightBtn.innerHTML =
+			`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" ` +
+			`fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
+			`<path d="m9 11-6 6v3h9l3-3"/>` +
+			`<path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>` +
+			`</svg>`;
+		this.highlightBtn.addEventListener("pointerdown", (e: PointerEvent) => {
+			e.stopPropagation();
+			this.highlightManager.toggle();
+		});
+
+		// Wire the highlight manager to its button and content area
+		// bodyEl will be set after render; pass scrollEl now and bodyEl on first render
+		this.highlightManager.init(this.highlightBtn, this.scrollEl, this.scrollEl);
 
 		// Outline overlay (hidden by default)
 		this.overlayEl = root.createEl("div", {
@@ -211,28 +252,66 @@ export class PreachView extends ItemView {
 		});
 	}
 
-	// Render the file into the scroll area
+	// Render the file into the scroll area using block-by-block rendering
 	private async renderFile(file: TFile): Promise<void> {
+		const scrollTop = this.savedScrollTop;
+		this.scriptureExpander.collapseAll();
 		this.scrollEl.empty();
 
 		const markdown = await this.app.vault.read(file);
-		const wrapper = this.scrollEl.createEl("div", { cls: "preach-body" });
+		const blocks = parseBlocks(markdown);
 
-		await MarkdownRenderer.render(
-			this.app,
-			markdown,
-			wrapper,
-			file.path,
-			this.renderComponent
-		);
+		// Store blocks in highlight manager
+		await this.highlightManager.attachBlocks(blocks);
+
+		const body = this.scrollEl.createEl("div", { cls: "preach-body" });
+
+		for (let i = 0; i < blocks.length; i++) {
+			const block = blocks[i];
+			const wrapper = body.createEl("div", {
+				cls: "preach-block",
+				attr: {
+					"data-block-index": String(i),
+					"data-highlightable": block.highlightable ? "true" : "false",
+				},
+			});
+
+			await MarkdownRenderer.render(
+				this.app,
+				block.content,
+				wrapper,
+				file.path,
+				this.renderComponent
+			);
+
+			if (block.highlightable) {
+				wrapper.addEventListener("pointerdown", (e: PointerEvent) => {
+					// Only handle in highlight mode; ignore if user is tapping a scripture ref
+					const target = e.target as HTMLElement;
+					if (target.closest(".preach-scripture-ref") || target.closest(".preach-scripture-expand")) {
+						return;
+					}
+					if (this.highlightManager.isActive()) {
+						e.stopPropagation();
+						this.highlightManager.handleBlockTap(i).then(() => {
+							// Re-render after highlight change
+							this.renderFile(file);
+						});
+					}
+				});
+			}
+		}
+
+		// Scripture detection pass
+		this.scriptureExpander.processElement(body);
+
+		// Tag headings so outline works
+		this.tagRenderedHeadings(body, markdown);
 
 		// Restore scroll position after render
 		window.requestAnimationFrame(() => {
-			this.scrollEl.scrollTop = this.savedScrollTop;
+			this.scrollEl.scrollTop = scrollTop;
 		});
-
-		// Tag headings so outline scroll-to works
-		this.tagRenderedHeadings(wrapper, markdown);
 	}
 
 	/**

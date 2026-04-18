@@ -21,6 +21,20 @@
 	--preach-muted: #888;
 	--preach-accent: #c9a84c;
 
+	/* Highlight feature */
+	--preach-highlight-active-bg: #ffd24a;
+	--preach-highlight-active-color: #1a1200;
+	--preach-highlight-btn-on-bg: #ffd24a;
+	--preach-highlight-btn-on-color: #1a1200;
+
+	/* Scripture feature */
+	--preach-scripture-ref-color: #a8c4e0;
+	--preach-scripture-ref-open-color: #c8dff0;
+	--preach-scripture-expand-bg: rgba(30, 50, 70, 0.85);
+	--preach-scripture-expand-border: rgba(100, 150, 200, 0.3);
+	--preach-scripture-expand-text: #d8eaf5;
+	--preach-scripture-verse-num-color: #7aacce;
+
 	/* Corners */
 	--preach-corner-size: 48px;
 	--preach-corner-bg: rgba(255, 255, 255, 0.08);
@@ -321,10 +335,104 @@
 	left: 0;
 }
 
-/* Reserved bottom-left slot for Session 2 highlight toggle */
-.preach-corner--reserved {
-	opacity: 0;
-	pointer-events: none;
+/* ------------------------------------------------------------------ */
+/* Highlight toggle button                                             */
+/* ------------------------------------------------------------------ */
+
+.preach-highlight-btn {
+	/* Off state: outlined, muted */
+	background: var(--preach-corner-bg);
+	color: var(--preach-corner-color);
+	border: 1.5px solid rgba(255, 255, 255, 0.15);
+	transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.preach-highlight-btn--on {
+	background: var(--preach-highlight-btn-on-bg);
+	color: var(--preach-highlight-btn-on-color);
+	border-color: var(--preach-highlight-btn-on-bg);
+}
+
+.preach-highlight-btn--on:hover,
+.preach-highlight-btn--on:active {
+	background: #ffe680;
+	color: var(--preach-highlight-btn-on-color);
+}
+
+/* Highlighted blocks: rendered ==...== text gets Obsidian's mark styling,
+   but inside preach view we reinforce it for dark background. */
+.preach-md-root mark,
+.preach-md-root .preach-body mark {
+	background: rgba(255, 210, 74, 0.28);
+	color: inherit;
+	border-radius: 2px;
+	padding: 0 1px;
+}
+
+/* Tappable block in highlight-mode gets a subtle tap affordance */
+.preach-block[data-highlightable="true"] {
+	border-radius: 4px;
+	transition: background 0.1s;
+}
+
+/* ------------------------------------------------------------------ */
+/* Scripture references                                                */
+/* ------------------------------------------------------------------ */
+
+.preach-scripture-ref {
+	color: var(--preach-scripture-ref-color);
+	text-decoration: underline;
+	text-decoration-style: dotted;
+	text-underline-offset: 3px;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	border-radius: 2px;
+	transition: color 0.1s;
+}
+
+.preach-scripture-ref--open {
+	color: var(--preach-scripture-ref-open-color);
+	text-decoration-style: solid;
+}
+
+.preach-scripture-expand {
+	display: block;
+	margin: 0.6em 0 0.2em 0;
+	padding: 0.65em 1em;
+	background: var(--preach-scripture-expand-bg);
+	border-left: 3px solid var(--preach-scripture-expand-border);
+	border-radius: 0 6px 6px 0;
+	color: var(--preach-scripture-expand-text);
+	font-size: 0.92em;
+	line-height: 1.75;
+	cursor: pointer;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+}
+
+.preach-scripture-verse {
+	display: inline;
+}
+
+.preach-scripture-verse-num {
+	font-size: 0.65em;
+	color: var(--preach-scripture-verse-num-color);
+	font-variant-numeric: tabular-nums;
+	margin-right: 1px;
+	vertical-align: super;
+	user-select: none;
+}
+
+.preach-scripture-expand--error {
+	border-left-color: rgba(200, 80, 80, 0.5);
+	background: rgba(60, 20, 20, 0.7);
+}
+
+.preach-scripture-error-text {
+	color: #e08080;
+	font-size: 0.88em;
+	font-style: italic;
 }
 
 /* ------------------------------------------------------------------ */

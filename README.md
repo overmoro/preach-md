@@ -8,8 +8,6 @@ Inspired by the Preach function in Logos Bible Software.
 
 ## Features
 
-### Session 1 (current)
-
 - **Preach view** - full-screen reading surface, Obsidian sidebars hidden, no accidental state changes
 - **Large serif typography** - high contrast, generous line-height, tuned for live delivery
 - **Free vertical scroll** - scroll position remembered within the session
@@ -19,11 +17,8 @@ Inspired by the Preach function in Logos Bible Software.
 - **Live timer** - elapsed time with configurable amber and red thresholds
 - **Screen wake lock** - keeps the display on while preach mode is active
 - **Edge-swipe suppression** - prevents accidental sidebar openings
-
-### Session 2 (coming)
-
-- Paragraph highlight toggle - tap a paragraph to mark it `==like this==` (persisted to file)
-- Scripture reference detection - tap a reference to inline-expand from vault Bible files
+- **Paragraph highlighting** - bottom-left button enables highlight mode; tap any paragraph to wrap it in `==...==` (persisted to the source file); tap again to remove
+- **Scripture tap-to-expand** - Bible references (e.g. `John 3:16`, `Rom 8:28-30`) are detected automatically; tap one to expand the passage inline from your vault Bible files; tap again to collapse
 
 ---
 
@@ -55,14 +50,23 @@ To update: open BRAT settings and click **Check for updates**.
 | Top-right | Exit | First tap shows "Exit?", second tap within 3s closes. |
 | Top-centre | Timer | Elapsed time. Tap to reset (two-step). |
 | Bottom-right | Edit | Switches to edit mode at the current scroll position. |
+| Bottom-left | Highlight | Toggles highlight mode (yellow when on). In highlight mode, tap any paragraph to add or remove `==...==` highlighting. |
+
+### Scripture expansion
+
+When preach mode is open, detected Bible references appear with a dotted underline. Tap a reference to expand the passage inline. The verse text is read from your vault Bible files (configurable in settings). Tap the expanded passage to collapse it.
+
+References in code blocks and callouts are intentionally skipped.
 
 ---
 
 ## Settings
 
-- **Amber warning** - timer turns amber at this many minutes (default: 25)
-- **Red warning** - timer turns red at this many minutes (default: 35)
+- **Target duration** - countdown start value in minutes (default: 30)
+- **Amber warning** - timer turns amber at this many minutes remaining (default: 5)
+- **Red warning** - timer turns red at this many minutes remaining (default: 1)
 - **Section heading level** - heading level used for the outline (default: 2, i.e. `##`)
+- **Bible folder path** - vault-relative path to your Bible chapter files (default: `30_Knowledge/Theology/Bible/CSB`). Each book should be a subfolder with files named like `John 3.md`, with verses under `###### N` headings.
 
 ---
 
