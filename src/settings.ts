@@ -2,6 +2,7 @@ import { App, PluginSettingTab, Setting } from "obsidian";
 import type PreachMDPlugin from "./main";
 
 export interface PreachMDSettings {
+	targetMinutes: number;
 	warnMinutes: number;
 	critMinutes: number;
 	sectionHeadingLevel: number;
@@ -11,8 +12,9 @@ export interface PreachMDSettings {
 }
 
 export const DEFAULT_SETTINGS: PreachMDSettings = {
-	warnMinutes: 25,
-	critMinutes: 35,
+	targetMinutes: 30,
+	warnMinutes: 5,
+	critMinutes: 1,
 	sectionHeadingLevel: 2,
 };
 
@@ -34,11 +36,27 @@ export class PreachMDSettingTab extends PluginSettingTab {
 		containerEl.createEl("h3", { text: "Timer" });
 
 		new Setting(containerEl)
-			.setName("Amber warning (minutes)")
-			.setDesc("Timer turns amber at this many minutes elapsed.")
+			.setName("Target duration (minutes)")
+			.setDesc("The countdown starts from this value.")
 			.addText((text) =>
 				text
-					.setPlaceholder("25")
+					.setPlaceholder("30")
+					.setValue(String(this.plugin.settings.targetMinutes))
+					.onChange(async (value) => {
+						const n = parseInt(value, 10);
+						if (!isNaN(n) && n > 0) {
+							this.plugin.settings.targetMinutes = n;
+							await this.plugin.saveSettings();
+						}
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Amber warning (minutes remaining)")
+			.setDesc("Timer turns amber when this many minutes remain.")
+			.addText((text) =>
+				text
+					.setPlaceholder("5")
 					.setValue(String(this.plugin.settings.warnMinutes))
 					.onChange(async (value) => {
 						const n = parseInt(value, 10);
@@ -50,11 +68,11 @@ export class PreachMDSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Red warning (minutes)")
-			.setDesc("Timer turns red at this many minutes elapsed.")
+			.setName("Red warning (minutes remaining)")
+			.setDesc("Timer turns red when this many minutes remain.")
 			.addText((text) =>
 				text
-					.setPlaceholder("35")
+					.setPlaceholder("1")
 					.setValue(String(this.plugin.settings.critMinutes))
 					.onChange(async (value) => {
 						const n = parseInt(value, 10);

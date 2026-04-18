@@ -1,111 +1,156 @@
 export interface TimerThresholds {
+	targetMinutes: number;
 	warnMinutes: number;
 	critMinutes: number;
 }
 
-export type TimerState = "normal" | "warn" | "crit";
+export type TimerRunState = "idle" | "running" | "paused";
+export type TimerColourState = "normal" | "warn" | "crit" | "overtime";
 
 export class PreachTimer {
-	private startTime: number;
-	private intervalId: number | null = null;
-	private el: HTMLElement;
 	private thresholds: TimerThresholds;
-	private onResetRequest: () => void;
-	private confirmTimeout: number | null = null;
-	private confirming = false;
+	private el: HTMLElement;
+	private labelEl: HTMLElement;
 
-	constructor(
-		container: HTMLElement,
-		thresholds: TimerThresholds,
-		onResetRequest: () => void
-	) {
+	// Three-state machine
+	private runState: TimerRunState = "idle";
+
+	// Remaining seconds at the moment the timer was last paused or started
+	private remainingAtPause: number;
+
+	// Timestamp when the current running segment began
+	private segmentStart: number | null = null;
+
+	private intervalId: number | null = null;
+
+	constructor(container: HTMLElement, thresholds: TimerThresholds) {
 		this.thresholds = thresholds;
-		this.onResetRequest = onResetRequest;
-		this.startTime = Date.now();
+		this.remainingAtPause = thresholds.targetMinutes * 60;
 
 		this.el = container.createEl("div", { cls: "preach-timer" });
 		this.el.setAttribute("role", "timer");
 		this.el.setAttribute("aria-live", "off");
-		this.el.textContent = "0:00";
+		this.el.dataset.runState = "idle";
+
+		this.labelEl = container.createEl("div", { cls: "preach-timer-label" });
+		this.labelEl.textContent = "Tap to start";
 
 		this.el.addEventListener("pointerdown", (e) => {
 			e.stopPropagation();
 			this.handleTap();
 		});
+
+		this.renderDisplay();
 	}
 
+	// Called from preach-view after open - starts tick loop so display is live
 	start(): void {
-		this.startTime = Date.now();
-		this.intervalId = window.setInterval(() => this.tick(), 1000);
-		this.tick();
+		// Just ensure the idle display is painted; user starts via tap
+		this.renderDisplay();
 	}
 
 	stop(): void {
-		if (this.intervalId !== null) {
-			window.clearInterval(this.intervalId);
-			this.intervalId = null;
-		}
-		if (this.confirmTimeout !== null) {
-			window.clearTimeout(this.confirmTimeout);
-			this.confirmTimeout = null;
-		}
-	}
-
-	reset(): void {
-		this.startTime = Date.now();
-		this.confirming = false;
-		this.el.classList.remove("preach-timer--confirm");
-		if (this.confirmTimeout !== null) {
-			window.clearTimeout(this.confirmTimeout);
-			this.confirmTimeout = null;
-		}
-		this.tick();
+		this.clearInterval();
 	}
 
 	updateThresholds(thresholds: TimerThresholds): void {
 		this.thresholds = thresholds;
+		if (this.runState === "idle") {
+			this.remainingAtPause = thresholds.targetMinutes * 60;
+		}
+		this.renderDisplay();
+	}
+
+	// Idle -> Running -> Paused -> Idle
+	private handleTap(): void {
+		if (this.runState === "idle") {
+			this.transitionToRunning();
+		} else if (this.runState === "running") {
+			this.transitionToPaused();
+		} else {
+			// paused -> idle (reset)
+			this.transitionToIdle();
+		}
+	}
+
+	private transitionToRunning(): void {
+		this.segmentStart = Date.now();
+		this.runState = "running";
+		this.el.dataset.runState = "running";
+		this.intervalId = window.setInterval(() => this.tick(), 250);
 		this.tick();
 	}
 
+	private transitionToPaused(): void {
+		this.remainingAtPause = this.computeRemaining();
+		this.clearInterval();
+		this.segmentStart = null;
+		this.runState = "paused";
+		this.el.dataset.runState = "paused";
+		this.renderDisplay();
+	}
+
+	private transitionToIdle(): void {
+		this.clearInterval();
+		this.segmentStart = null;
+		this.runState = "idle";
+		this.el.dataset.runState = "idle";
+		this.remainingAtPause = this.thresholds.targetMinutes * 60;
+		this.renderDisplay();
+	}
+
+	private clearInterval(): void {
+		if (this.intervalId !== null) {
+			window.clearInterval(this.intervalId);
+			this.intervalId = null;
+		}
+	}
+
+	private computeRemaining(): number {
+		if (this.segmentStart === null) return this.remainingAtPause;
+		const elapsed = (Date.now() - this.segmentStart) / 1000;
+		return this.remainingAtPause - elapsed;
+	}
+
 	private tick(): void {
-		const elapsed = Date.now() - this.startTime;
-		const totalSecs = Math.floor(elapsed / 1000);
-		const mins = Math.floor(totalSecs / 60);
-		const secs = totalSecs % 60;
-		const display = `${mins}:${secs.toString().padStart(2, "0")}`;
-
-		if (!this.confirming) {
-			this.el.textContent = display;
-		}
-
-		const state = this.computeState(mins);
-		this.el.dataset.state = state;
+		this.renderDisplay();
 	}
 
-	private computeState(mins: number): TimerState {
-		if (mins >= this.thresholds.critMinutes) return "crit";
-		if (mins >= this.thresholds.warnMinutes) return "warn";
-		return "normal";
-	}
+	private renderDisplay(): void {
+		const remaining = this.runState === "running"
+			? this.computeRemaining()
+			: this.remainingAtPause;
 
-	private handleTap(): void {
-		if (this.confirming) {
-			// Second tap: reset
-			this.reset();
-			this.onResetRequest();
-			return;
+		const isOvertime = remaining < 0;
+		const absSecs = Math.abs(Math.ceil(remaining));
+		const mins = Math.floor(absSecs / 60);
+		const secs = absSecs % 60;
+		const timeStr = `${mins}:${secs.toString().padStart(2, "0")}`;
+		const display = isOvertime ? `+${timeStr}` : timeStr;
+
+		this.el.textContent = display;
+
+		// Colour state
+		const remainingMins = remaining / 60;
+		let colourState: TimerColourState;
+		if (isOvertime) {
+			colourState = "overtime";
+		} else if (remainingMins <= this.thresholds.critMinutes) {
+			colourState = "crit";
+		} else if (remainingMins <= this.thresholds.warnMinutes) {
+			colourState = "warn";
+		} else {
+			colourState = "normal";
 		}
+		this.el.dataset.state = colourState;
 
-		// First tap: enter confirm state
-		this.confirming = true;
-		this.el.classList.add("preach-timer--confirm");
-		this.el.textContent = "Reset?";
-
-		this.confirmTimeout = window.setTimeout(() => {
-			this.confirming = false;
-			this.el.classList.remove("preach-timer--confirm");
-			this.tick();
-			this.confirmTimeout = null;
-		}, 3000);
+		// Label
+		if (this.runState === "idle") {
+			this.labelEl.textContent = "Tap to start";
+		} else if (this.runState === "running") {
+			this.labelEl.textContent = "Tap to pause";
+		} else {
+			this.labelEl.textContent = "Tap to reset";
+		}
 	}
 }

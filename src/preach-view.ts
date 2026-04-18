@@ -135,16 +135,11 @@ export class PreachView extends ItemView {
 
 		// Timer pill (top-centre)
 		this.timerEl = root.createEl("div", { cls: "preach-timer-wrap" });
-		this.timer = new PreachTimer(
-			this.timerEl,
-			{
-				warnMinutes: this.plugin.settings.warnMinutes,
-				critMinutes: this.plugin.settings.critMinutes,
-			},
-			() => {
-				// Timer reset callback - nothing extra needed
-			}
-		);
+		this.timer = new PreachTimer(this.timerEl, {
+			targetMinutes: this.plugin.settings.targetMinutes,
+			warnMinutes: this.plugin.settings.warnMinutes,
+			critMinutes: this.plugin.settings.critMinutes,
+		});
 
 		// Corner controls container
 		const corners = root.createEl("div", { cls: "preach-corners" });
