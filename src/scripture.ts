@@ -548,12 +548,33 @@ export class ScriptureExpander {
 			expandEl.empty();
 			expandEl.className = "preach-scripture-expand";
 
+			// Render all verses as a single flowing paragraph.
+			// Each verse gets an inline superscript number; no block breaks between verses.
+			const passageEl = expandEl.createEl("span", { cls: "preach-scripture-passage" });
+
 			for (const { verse, text } of verses) {
-				const row = expandEl.createEl("span", { cls: "preach-scripture-verse" });
-				const num = row.createEl("sup", { cls: "preach-scripture-verse-num", text: String(verse) });
-				row.appendChild(num);
-				const textEl = row.createEl("span", { cls: "preach-scripture-verse-text" });
-				await MarkdownRenderer.render(this.app, text, textEl, this.sourcePath, this.component);
+				// Superscript verse number
+				passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: String(verse) });
+
+				// Render verse text into a temp container, then lift child nodes inline.
+				// MarkdownRenderer wraps plain text in <p>; unwrap to keep flow continuous.
+				const tmp = document.createElement("div");
+				await MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
+
+				const nodes = Array.from(tmp.childNodes);
+				for (const node of nodes) {
+					if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "P") {
+						const children = Array.from(node.childNodes);
+						for (const child of children) {
+							passageEl.appendChild(child);
+						}
+					} else {
+						passageEl.appendChild(node);
+					}
+				}
+
+				// Space between verses
+				passageEl.appendChild(document.createTextNode(" "));
 			}
 
 			// Tap on the expansion itself collapses it

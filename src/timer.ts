@@ -23,6 +23,10 @@ export class PreachTimer {
 
 	private intervalId: number | null = null;
 
+	// Double-tap detection
+	private lastTapTime: number = 0;
+	private singleTapTimeout: number | null = null;
+
 	constructor(container: HTMLElement, thresholds: TimerThresholds) {
 		this.thresholds = thresholds;
 		this.remainingAtPause = thresholds.targetMinutes * 60;
@@ -51,6 +55,10 @@ export class PreachTimer {
 
 	stop(): void {
 		this.clearInterval();
+		if (this.singleTapTimeout !== null) {
+			window.clearTimeout(this.singleTapTimeout);
+			this.singleTapTimeout = null;
+		}
 	}
 
 	updateThresholds(thresholds: TimerThresholds): void {
@@ -61,15 +69,35 @@ export class PreachTimer {
 		this.renderDisplay();
 	}
 
-	// Idle -> Running -> Paused -> Idle
+	// Single tap: toggle running/paused (or start if idle)
+	// Double tap (within 300ms): reset to idle
 	private handleTap(): void {
-		if (this.runState === "idle") {
-			this.transitionToRunning();
-		} else if (this.runState === "running") {
-			this.transitionToPaused();
-		} else {
-			// paused -> idle (reset)
+		const now = Date.now();
+		const timeSinceLast = now - this.lastTapTime;
+		this.lastTapTime = now;
+
+		if (timeSinceLast < 300) {
+			// Double-tap detected - cancel pending single-tap and reset
+			if (this.singleTapTimeout !== null) {
+				window.clearTimeout(this.singleTapTimeout);
+				this.singleTapTimeout = null;
+			}
 			this.transitionToIdle();
+			return;
+		}
+
+		// Schedule single-tap action after 300ms window
+		this.singleTapTimeout = window.setTimeout(() => {
+			this.singleTapTimeout = null;
+			this.handleSingleTap();
+		}, 300);
+	}
+
+	private handleSingleTap(): void {
+		if (this.runState === "idle" || this.runState === "paused") {
+			this.transitionToRunning();
+		} else {
+			this.transitionToPaused();
 		}
 	}
 
@@ -148,9 +176,9 @@ export class PreachTimer {
 		if (this.runState === "idle") {
 			this.labelEl.textContent = "Tap to start";
 		} else if (this.runState === "running") {
-			this.labelEl.textContent = "Tap to pause";
+			this.labelEl.textContent = "Tap to pause  |  Double-tap to reset";
 		} else {
-			this.labelEl.textContent = "Tap to reset";
+			this.labelEl.textContent = "Tap to resume  |  Double-tap to reset";
 		}
 	}
 }

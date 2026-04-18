@@ -61,7 +61,6 @@ export class PreachView extends ItemView {
 	private editBtn!: HTMLElement;
 	private overlayEl!: HTMLElement;
 	private exitChip!: HTMLElement;
-	private highlightBtn!: HTMLElement;
 
 	// Timer
 	private timer!: PreachTimer;
@@ -218,30 +217,8 @@ export class PreachView extends ItemView {
 			this.goToEdit();
 		});
 
-		// Bottom-left: highlight toggle
-		this.highlightBtn = corners.createEl("button", {
-			cls: "preach-corner preach-corner--bottom-left preach-highlight-btn",
-			attr: {
-				"aria-label": "Toggle paragraph highlight",
-				title: "Highlight",
-				"aria-pressed": "false",
-			},
-		});
-		// Lucide highlighter icon
-		this.highlightBtn.innerHTML =
-			`<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" ` +
-			`fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
-			`<path d="m9 11-6 6v3h9l3-3"/>` +
-			`<path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/>` +
-			`</svg>`;
-		this.highlightBtn.addEventListener("pointerdown", (e: PointerEvent) => {
-			e.stopPropagation();
-			this.highlightManager.toggle();
-		});
-
-		// Wire the highlight manager to its button and content area
-		// bodyEl will be set after render; pass scrollEl now and bodyEl on first render
-		this.highlightManager.init(this.highlightBtn, this.scrollEl, this.scrollEl);
+		// Wire the highlight manager to its content area (button removed)
+		this.highlightManager.init(null, this.scrollEl, this.scrollEl);
 
 		// Outline overlay (hidden by default)
 		this.overlayEl = root.createEl("div", {

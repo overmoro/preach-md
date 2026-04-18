@@ -135,7 +135,7 @@ export class HighlightManager {
 	private file: TFile;
 	private blocks: Block[] = [];
 	private active = false;
-	private btn!: HTMLElement;
+	private btn: HTMLElement | null = null;
 	private scrollEl!: HTMLElement;
 	private bodyEl!: HTMLElement;
 	private renderComponent: Component;
@@ -147,7 +147,7 @@ export class HighlightManager {
 	}
 
 	/** Call once after the preach view is built to wire the button and content area. */
-	init(btn: HTMLElement, scrollEl: HTMLElement, bodyEl: HTMLElement): void {
+	init(btn: HTMLElement | null, scrollEl: HTMLElement, bodyEl: HTMLElement): void {
 		this.btn = btn;
 		this.scrollEl = scrollEl;
 		this.bodyEl = bodyEl;

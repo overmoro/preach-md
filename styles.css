@@ -336,28 +336,8 @@
 }
 
 /* ------------------------------------------------------------------ */
-/* Highlight toggle button                                             */
+/* Highlight rendering (==...== native Obsidian marks, no button)      */
 /* ------------------------------------------------------------------ */
-
-.preach-highlight-btn {
-	/* Off state: outlined, muted */
-	background: var(--preach-corner-bg);
-	color: var(--preach-corner-color);
-	border: 1.5px solid rgba(255, 255, 255, 0.15);
-	transition: background 0.15s, color 0.15s, border-color 0.15s;
-}
-
-.preach-highlight-btn--on {
-	background: var(--preach-highlight-btn-on-bg);
-	color: var(--preach-highlight-btn-on-color);
-	border-color: var(--preach-highlight-btn-on-bg);
-}
-
-.preach-highlight-btn--on:hover,
-.preach-highlight-btn--on:active {
-	background: #ffe680;
-	color: var(--preach-highlight-btn-on-color);
-}
 
 /* Highlighted blocks: rendered ==...== text gets Obsidian's mark styling,
    but inside preach view we reinforce it for dark background. */
@@ -413,6 +393,11 @@
 
 .preach-scripture-verse {
 	display: inline;
+}
+
+.preach-scripture-passage {
+	display: inline;
+	line-height: inherit;
 }
 
 .preach-scripture-verse-num {
