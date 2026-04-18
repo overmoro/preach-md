@@ -1,7 +1,7 @@
 {
   "id": "preach-md",
   "name": "Preach MD",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "minAppVersion": "1.4.0",
   "description": "Full-screen preach mode for delivering sermons from iPad. Free scroll, scripture tap-to-expand, timer, outline navigation.",
   "author": "Don",

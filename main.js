@@ -166,7 +166,7 @@ var PreachTimer = class {
     } else if (this.runState === "running") {
       this.labelEl.textContent = "Pause";
     } else {
-      this.labelEl.textContent = "Resume | Reset";
+      this.labelEl.textContent = "Resume | reset";
     }
   }
 };
@@ -184,14 +184,11 @@ function parseBlocks(markdown) {
     }
   }
   const body = markdown.slice(bodyStart);
-  const paragraphRegex = /([^\n]+(?:\n(?!\n)[^\n]*)*)/g;
-  let match;
   let inCodeFence = false;
   const lines = body.split("\n");
   let i = 0;
   let charOffset = bodyStart;
   while (i < lines.length) {
-    const lineStart = charOffset;
     const line = lines[i];
     if (/^```/.test(line) || /^~~~/.test(line)) {
       inCodeFence = !inCodeFence;
@@ -273,7 +270,7 @@ var HighlightManager = class {
    * Called after the preach view renders a new file.
    * Rebuilds block map and attaches tap listeners to block wrappers.
    */
-  async attachBlocks(blocks) {
+  attachBlocks(blocks) {
     this.blocks = blocks;
   }
   /**
@@ -284,10 +281,11 @@ var HighlightManager = class {
     if (!this.active)
       return;
     const block = this.blocks[blockIndex];
-    if (!block || !block.highlightable)
+    if (!block || !block.highlightable || !this.file)
       return;
+    const file = this.file;
     const scrollTop = this.scrollEl.scrollTop;
-    await this.app.vault.process(this.file, (source) => {
+    await this.app.vault.process(file, (source) => {
       const before = source.slice(0, block.start);
       const content = source.slice(block.start, block.end);
       const after = source.slice(block.end);
@@ -295,7 +293,7 @@ var HighlightManager = class {
       block.content = toggled.trim();
       return before + toggled + after;
     });
-    const updated = await this.app.vault.read(this.file);
+    const updated = await this.app.vault.read(file);
     this.blocks = parseBlocks(updated);
     window.requestAnimationFrame(() => {
       this.scrollEl.scrollTop = scrollTop;
@@ -807,17 +805,17 @@ async function loadChapter(app, csbFolder, book, chapter) {
 }
 async function fetchVerses(app, csbFolder, ref) {
   if (ref.crossChapter) {
-    throw "Cross-chapter ranges not supported yet.";
+    throw new Error("Cross-chapter ranges not supported yet.");
   }
   const map = await loadChapter(app, csbFolder, ref.book, ref.chapter);
   if (!map) {
-    throw `Passage not found: ${ref.raw}`;
+    throw new Error(`Passage not found: ${ref.raw}`);
   }
   const results = [];
   for (let v = ref.verseStart; v <= ref.verseEnd; v++) {
     const text = map.get(v);
     if (text === void 0) {
-      throw `Passage not found: ${ref.raw}`;
+      throw new Error(`Passage not found: ${ref.raw}`);
     }
     results.push({ verse: v, text });
   }
@@ -944,7 +942,7 @@ var ScriptureExpander = class {
     } catch (err) {
       expandEl.empty();
       expandEl.className = "preach-scripture-expand preach-scripture-expand--error";
-      const msg = typeof err === "string" ? err : `Could not load ${ref.raw}`;
+      const msg = err instanceof Error ? err.message : `Could not load ${ref.raw}`;
       expandEl.createEl("span", { cls: "preach-scripture-error-text", text: msg });
       expandEl.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
@@ -1000,12 +998,11 @@ var PreachView = class extends import_obsidian2.ItemView {
     return "book-open";
   }
   async onOpen() {
-    var _a;
     this.renderComponent = new import_obsidian2.Component();
     this.renderComponent.load();
     this.highlightManager = new HighlightManager(
       this.app,
-      (_a = this.file) != null ? _a : {},
+      this.file,
       this.renderComponent
     );
     this.scriptureExpander = new ScriptureExpander(
@@ -1057,7 +1054,12 @@ var PreachView = class extends import_obsidian2.ItemView {
       cls: "preach-corner preach-corner--top-left",
       attr: { "aria-label": "Outline", title: "Outline" }
     });
-    this.outlineBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/><line x1="3" y1="18" x2="18" y2="18"/></svg>`;
+    const outlineSvg = this.outlineBtn.createSvg("svg", {
+      attr: { xmlns: "http://www.w3.org/2000/svg", width: "22", height: "22", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" }
+    });
+    outlineSvg.createSvg("line", { attr: { x1: "3", y1: "6", x2: "21", y2: "6" } });
+    outlineSvg.createSvg("line", { attr: { x1: "3", y1: "12", x2: "15", y2: "12" } });
+    outlineSvg.createSvg("line", { attr: { x1: "3", y1: "18", x2: "18", y2: "18" } });
     this.outlineBtn.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
       this.toggleOutline();
@@ -1073,7 +1075,11 @@ var PreachView = class extends import_obsidian2.ItemView {
       cls: "preach-corner preach-corner--top-right",
       attr: { "aria-label": "Exit preach mode", title: "Exit" }
     });
-    this.exitBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+    const exitSvg = this.exitBtn.createSvg("svg", {
+      attr: { xmlns: "http://www.w3.org/2000/svg", width: "22", height: "22", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" }
+    });
+    exitSvg.createSvg("line", { attr: { x1: "18", y1: "6", x2: "6", y2: "18" } });
+    exitSvg.createSvg("line", { attr: { x1: "6", y1: "6", x2: "18", y2: "18" } });
     this.exitBtn.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
       this.handleExit();
@@ -1082,7 +1088,11 @@ var PreachView = class extends import_obsidian2.ItemView {
       cls: "preach-corner preach-corner--bottom-right",
       attr: { "aria-label": "Edit note", title: "Edit" }
     });
-    this.editBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+    const editSvg = this.editBtn.createSvg("svg", {
+      attr: { xmlns: "http://www.w3.org/2000/svg", width: "22", height: "22", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" }
+    });
+    editSvg.createSvg("path", { attr: { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" } });
+    editSvg.createSvg("path", { attr: { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" } });
     this.editBtn.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
       this.goToEdit();
@@ -1104,7 +1114,7 @@ var PreachView = class extends import_obsidian2.ItemView {
     this.scrollEl.empty();
     const markdown = await this.app.vault.read(file);
     const blocks = parseBlocks(markdown);
-    await this.highlightManager.attachBlocks(blocks);
+    this.highlightManager.attachBlocks(blocks);
     const body = this.scrollEl.createEl("div", { cls: "preach-body" });
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
@@ -1130,8 +1140,8 @@ var PreachView = class extends import_obsidian2.ItemView {
           }
           if (this.highlightManager.isActive()) {
             e.stopPropagation();
-            this.highlightManager.handleBlockTap(i).then(() => {
-              this.renderFile(file);
+            void this.highlightManager.handleBlockTap(i).then(() => {
+              void this.renderFile(file);
             });
           }
         });
@@ -1252,7 +1262,7 @@ var PreachView = class extends import_obsidian2.ItemView {
         const nav = navigator;
         this.wakeLock = await nav.wakeLock.request("screen");
       }
-    } catch (_err) {
+    } catch (_e) {
     }
   }
   async releaseWakeLock() {
@@ -1306,54 +1316,54 @@ var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "Preach MD" });
-    containerEl.createEl("h3", { text: "Timer" });
+    new import_obsidian3.Setting(containerEl).setName("Preach MD").setHeading();
+    new import_obsidian3.Setting(containerEl).setName("Timer").setHeading();
     new import_obsidian3.Setting(containerEl).setName("Target duration (minutes)").setDesc("The countdown starts from this value.").addText(
-      (text) => text.setPlaceholder("30").setValue(String(this.plugin.settings.targetMinutes)).onChange(async (value) => {
+      (text) => text.setPlaceholder("30").setValue(String(this.plugin.settings.targetMinutes)).onChange((value) => {
         const n = parseInt(value, 10);
         if (!isNaN(n) && n > 0) {
           this.plugin.settings.targetMinutes = n;
-          await this.plugin.saveSettings();
+          void this.plugin.saveSettings();
         }
       })
     );
     new import_obsidian3.Setting(containerEl).setName("Amber warning (minutes remaining)").setDesc("Timer turns amber when this many minutes remain.").addText(
-      (text) => text.setPlaceholder("5").setValue(String(this.plugin.settings.warnMinutes)).onChange(async (value) => {
+      (text) => text.setPlaceholder("5").setValue(String(this.plugin.settings.warnMinutes)).onChange((value) => {
         const n = parseInt(value, 10);
         if (!isNaN(n) && n > 0) {
           this.plugin.settings.warnMinutes = n;
-          await this.plugin.saveSettings();
+          void this.plugin.saveSettings();
         }
       })
     );
     new import_obsidian3.Setting(containerEl).setName("Red warning (minutes remaining)").setDesc("Timer turns red when this many minutes remain.").addText(
-      (text) => text.setPlaceholder("1").setValue(String(this.plugin.settings.critMinutes)).onChange(async (value) => {
+      (text) => text.setPlaceholder("1").setValue(String(this.plugin.settings.critMinutes)).onChange((value) => {
         const n = parseInt(value, 10);
         if (!isNaN(n) && n > 0) {
           this.plugin.settings.critMinutes = n;
-          await this.plugin.saveSettings();
+          void this.plugin.saveSettings();
         }
       })
     );
-    containerEl.createEl("h3", { text: "Navigation" });
+    new import_obsidian3.Setting(containerEl).setName("Navigation").setHeading();
     new import_obsidian3.Setting(containerEl).setName("Section heading level").setDesc(
       "Heading level used to build the outline (2 = ##, 3 = ###)."
     ).addText(
-      (text) => text.setPlaceholder("2").setValue(String(this.plugin.settings.sectionHeadingLevel)).onChange(async (value) => {
+      (text) => text.setPlaceholder("2").setValue(String(this.plugin.settings.sectionHeadingLevel)).onChange((value) => {
         const n = parseInt(value, 10);
         if (!isNaN(n) && n >= 1 && n <= 6) {
           this.plugin.settings.sectionHeadingLevel = n;
-          await this.plugin.saveSettings();
+          void this.plugin.saveSettings();
         }
       })
     );
-    containerEl.createEl("h3", { text: "Scripture" });
+    new import_obsidian3.Setting(containerEl).setName("Scripture").setHeading();
     new import_obsidian3.Setting(containerEl).setName("Bible folder path").setDesc(
       "Vault-relative path to your Bible chapter files. Each book should be a folder with files named like 'John 3.md'."
     ).addText(
-      (text) => text.setPlaceholder("30_Knowledge/Theology/Bible/CSB").setValue(this.plugin.settings.csbFolderPath).onChange(async (value) => {
+      (text) => text.setPlaceholder("30_Knowledge/Theology/Bible/CSB").setValue(this.plugin.settings.csbFolderPath).onChange((value) => {
         this.plugin.settings.csbFolderPath = value.trim();
-        await this.plugin.saveSettings();
+        void this.plugin.saveSettings();
       })
     );
   }
@@ -1373,12 +1383,11 @@ var PreachMDPlugin = class extends import_obsidian4.Plugin {
       callback: () => this.openPreachMode()
     });
     this.addRibbonIcon("book-open", "Preach MD: open preach mode", () => {
-      this.openPreachMode();
+      void this.openPreachMode();
     });
     this.addSettingTab(new PreachMDSettingTab(this.app, this));
   }
   onunload() {
-    this.app.workspace.detachLeavesOfType(PREACH_VIEW_TYPE);
   }
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());

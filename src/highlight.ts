@@ -2,7 +2,7 @@
 // Tapping a paragraph in highlight mode wraps its content in ==...== in the source file.
 // Highlights are persisted to the file via vault.process().
 
-import { App, MarkdownRenderer, TFile, Component } from "obsidian";
+import { App, TFile, Component } from "obsidian";
 
 export interface Block {
 	/** Source character offset: start of this block in the raw markdown. */
@@ -37,10 +37,6 @@ export function parseBlocks(markdown: string): Block[] {
 	}
 
 	const body = markdown.slice(bodyStart);
-	// Split into paragraphs by one or more blank lines
-	const paragraphRegex = /([^\n]+(?:\n(?!\n)[^\n]*)*)/g;
-	let match: RegExpExecArray | null;
-
 	let inCodeFence = false;
 
 	// Work line-by-line to identify blocks
@@ -49,7 +45,6 @@ export function parseBlocks(markdown: string): Block[] {
 	let charOffset = bodyStart;
 
 	while (i < lines.length) {
-		const lineStart = charOffset;
 		const line = lines[i];
 
 		// Track code fences
@@ -132,7 +127,7 @@ export function toggleHighlight(content: string): string {
 
 export class HighlightManager {
 	private app: App;
-	private file: TFile;
+	private file: TFile | null;
 	private blocks: Block[] = [];
 	private active = false;
 	private btn: HTMLElement | null = null;
@@ -140,7 +135,7 @@ export class HighlightManager {
 	private bodyEl!: HTMLElement;
 	private renderComponent: Component;
 
-	constructor(app: App, file: TFile, renderComponent: Component) {
+	constructor(app: App, file: TFile | null, renderComponent: Component) {
 		this.app = app;
 		this.file = file;
 		this.renderComponent = renderComponent;
@@ -171,7 +166,7 @@ export class HighlightManager {
 	 * Called after the preach view renders a new file.
 	 * Rebuilds block map and attaches tap listeners to block wrappers.
 	 */
-	async attachBlocks(blocks: Block[]): Promise<void> {
+	attachBlocks(blocks: Block[]): void {
 		this.blocks = blocks;
 	}
 
@@ -183,11 +178,12 @@ export class HighlightManager {
 		if (!this.active) return;
 
 		const block = this.blocks[blockIndex];
-		if (!block || !block.highlightable) return;
+		if (!block || !block.highlightable || !this.file) return;
+		const file = this.file;
 
 		const scrollTop = this.scrollEl.scrollTop;
 
-		await this.app.vault.process(this.file, (source) => {
+		await this.app.vault.process(file, (source) => {
 			const before = source.slice(0, block.start);
 			const content = source.slice(block.start, block.end);
 			const after = source.slice(block.end);
@@ -200,7 +196,7 @@ export class HighlightManager {
 		});
 
 		// Re-read and re-parse after the write so offsets stay accurate
-		const updated = await this.app.vault.read(this.file);
+		const updated = await this.app.vault.read(file);
 		this.blocks = parseBlocks(updated);
 
 		// Restore scroll

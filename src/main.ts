@@ -1,4 +1,4 @@
-import { Plugin, TFile, WorkspaceLeaf } from "obsidian";
+import { Plugin, WorkspaceLeaf } from "obsidian";
 import { PREACH_VIEW_TYPE, PreachView } from "./preach-view";
 import { PreachMDSettings, DEFAULT_SETTINGS, PreachMDSettingTab } from "./settings";
 
@@ -23,7 +23,7 @@ export default class PreachMDPlugin extends Plugin {
 
 		// Ribbon icon
 		this.addRibbonIcon("book-open", "Preach MD: open preach mode", () => {
-			this.openPreachMode();
+			void this.openPreachMode();
 		});
 
 		// Settings tab
@@ -31,7 +31,7 @@ export default class PreachMDPlugin extends Plugin {
 	}
 
 	onunload(): void {
-		this.app.workspace.detachLeavesOfType(PREACH_VIEW_TYPE);
+		// Obsidian handles leaf cleanup on unload
 	}
 
 	async loadSettings(): Promise<void> {

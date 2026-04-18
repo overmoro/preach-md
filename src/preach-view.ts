@@ -105,7 +105,7 @@ export class PreachView extends ItemView {
 
 		this.highlightManager = new HighlightManager(
 			this.app,
-			this.file ?? ({} as TFile),
+			this.file,
 			this.renderComponent
 		);
 		this.scriptureExpander = new ScriptureExpander(
@@ -171,11 +171,12 @@ export class PreachView extends ItemView {
 			cls: "preach-corner preach-corner--top-left",
 			attr: { "aria-label": "Outline", title: "Outline" },
 		});
-		this.outlineBtn.innerHTML =
-			`<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" ` +
-			`fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
-			`<line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="15" y2="12"/>` +
-			`<line x1="3" y1="18" x2="18" y2="18"/></svg>`;
+		const outlineSvg = this.outlineBtn.createSvg("svg", {
+			attr: { xmlns: "http://www.w3.org/2000/svg", width: "22", height: "22", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" },
+		});
+		outlineSvg.createSvg("line", { attr: { x1: "3", y1: "6", x2: "21", y2: "6" } });
+		outlineSvg.createSvg("line", { attr: { x1: "3", y1: "12", x2: "15", y2: "12" } });
+		outlineSvg.createSvg("line", { attr: { x1: "3", y1: "18", x2: "18", y2: "18" } });
 		this.outlineBtn.addEventListener("pointerdown", (e: PointerEvent) => {
 			e.stopPropagation();
 			this.toggleOutline();
@@ -193,10 +194,11 @@ export class PreachView extends ItemView {
 			cls: "preach-corner preach-corner--top-right",
 			attr: { "aria-label": "Exit preach mode", title: "Exit" },
 		});
-		this.exitBtn.innerHTML =
-			`<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" ` +
-			`fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
-			`<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
+		const exitSvg = this.exitBtn.createSvg("svg", {
+			attr: { xmlns: "http://www.w3.org/2000/svg", width: "22", height: "22", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" },
+		});
+		exitSvg.createSvg("line", { attr: { x1: "18", y1: "6", x2: "6", y2: "18" } });
+		exitSvg.createSvg("line", { attr: { x1: "6", y1: "6", x2: "18", y2: "18" } });
 		this.exitBtn.addEventListener("pointerdown", (e: PointerEvent) => {
 			e.stopPropagation();
 			this.handleExit();
@@ -207,11 +209,11 @@ export class PreachView extends ItemView {
 			cls: "preach-corner preach-corner--bottom-right",
 			attr: { "aria-label": "Edit note", title: "Edit" },
 		});
-		this.editBtn.innerHTML =
-			`<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" ` +
-			`fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
-			`<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>` +
-			`<path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+		const editSvg = this.editBtn.createSvg("svg", {
+			attr: { xmlns: "http://www.w3.org/2000/svg", width: "22", height: "22", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" },
+		});
+		editSvg.createSvg("path", { attr: { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" } });
+		editSvg.createSvg("path", { attr: { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" } });
 		this.editBtn.addEventListener("pointerdown", (e: PointerEvent) => {
 			e.stopPropagation();
 			this.goToEdit();
@@ -241,7 +243,7 @@ export class PreachView extends ItemView {
 		const blocks = parseBlocks(markdown);
 
 		// Store blocks in highlight manager
-		await this.highlightManager.attachBlocks(blocks);
+		this.highlightManager.attachBlocks(blocks);
 
 		const body = this.scrollEl.createEl("div", { cls: "preach-body" });
 
@@ -272,9 +274,9 @@ export class PreachView extends ItemView {
 					}
 					if (this.highlightManager.isActive()) {
 						e.stopPropagation();
-						this.highlightManager.handleBlockTap(i).then(() => {
+						void this.highlightManager.handleBlockTap(i).then(() => {
 							// Re-render after highlight change
-							this.renderFile(file);
+							void this.renderFile(file);
 						});
 					}
 				});
@@ -417,7 +419,7 @@ export class PreachView extends ItemView {
 				const nav = navigator as Navigator & { wakeLock: WakeLockAPI };
 				this.wakeLock = await nav.wakeLock.request("screen");
 			}
-		} catch (_err) {
+		} catch (_e) {
 			// Wake lock unavailable - non-fatal
 		}
 	}

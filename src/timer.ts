@@ -178,7 +178,7 @@ export class PreachTimer {
 		} else if (this.runState === "running") {
 			this.labelEl.textContent = "Pause";
 		} else {
-			this.labelEl.textContent = "Resume | Reset";
+			this.labelEl.textContent = "Resume | reset";
 		}
 	}
 }

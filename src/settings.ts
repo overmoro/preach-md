@@ -29,10 +29,10 @@ export class PreachMDSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		containerEl.createEl("h2", { text: "Preach MD" });
+		new Setting(containerEl).setName("Preach MD").setHeading();
 
 		// Timer thresholds
-		containerEl.createEl("h3", { text: "Timer" });
+		new Setting(containerEl).setName("Timer").setHeading();
 
 		new Setting(containerEl)
 			.setName("Target duration (minutes)")
@@ -41,11 +41,11 @@ export class PreachMDSettingTab extends PluginSettingTab {
 				text
 					.setPlaceholder("30")
 					.setValue(String(this.plugin.settings.targetMinutes))
-					.onChange(async (value) => {
+					.onChange((value) => {
 						const n = parseInt(value, 10);
 						if (!isNaN(n) && n > 0) {
 							this.plugin.settings.targetMinutes = n;
-							await this.plugin.saveSettings();
+							void this.plugin.saveSettings();
 						}
 					})
 			);
@@ -57,11 +57,11 @@ export class PreachMDSettingTab extends PluginSettingTab {
 				text
 					.setPlaceholder("5")
 					.setValue(String(this.plugin.settings.warnMinutes))
-					.onChange(async (value) => {
+					.onChange((value) => {
 						const n = parseInt(value, 10);
 						if (!isNaN(n) && n > 0) {
 							this.plugin.settings.warnMinutes = n;
-							await this.plugin.saveSettings();
+							void this.plugin.saveSettings();
 						}
 					})
 			);
@@ -73,17 +73,17 @@ export class PreachMDSettingTab extends PluginSettingTab {
 				text
 					.setPlaceholder("1")
 					.setValue(String(this.plugin.settings.critMinutes))
-					.onChange(async (value) => {
+					.onChange((value) => {
 						const n = parseInt(value, 10);
 						if (!isNaN(n) && n > 0) {
 							this.plugin.settings.critMinutes = n;
-							await this.plugin.saveSettings();
+							void this.plugin.saveSettings();
 						}
 					})
 			);
 
 		// Section navigation
-		containerEl.createEl("h3", { text: "Navigation" });
+		new Setting(containerEl).setName("Navigation").setHeading();
 
 		new Setting(containerEl)
 			.setName("Section heading level")
@@ -94,17 +94,17 @@ export class PreachMDSettingTab extends PluginSettingTab {
 				text
 					.setPlaceholder("2")
 					.setValue(String(this.plugin.settings.sectionHeadingLevel))
-					.onChange(async (value) => {
+					.onChange((value) => {
 						const n = parseInt(value, 10);
 						if (!isNaN(n) && n >= 1 && n <= 6) {
 							this.plugin.settings.sectionHeadingLevel = n;
-							await this.plugin.saveSettings();
+							void this.plugin.saveSettings();
 						}
 					})
 			);
 
 		// Scripture
-		containerEl.createEl("h3", { text: "Scripture" });
+		new Setting(containerEl).setName("Scripture").setHeading();
 
 		new Setting(containerEl)
 			.setName("Bible folder path")
@@ -115,9 +115,9 @@ export class PreachMDSettingTab extends PluginSettingTab {
 				text
 					.setPlaceholder("30_Knowledge/Theology/Bible/CSB")
 					.setValue(this.plugin.settings.csbFolderPath)
-					.onChange(async (value) => {
+					.onChange((value) => {
 						this.plugin.settings.csbFolderPath = value.trim();
-						await this.plugin.saveSettings();
+						void this.plugin.saveSettings();
 					})
 			);
 	}

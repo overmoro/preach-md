@@ -377,7 +377,7 @@ async function loadChapter(
 	const file = app.vault.getAbstractFileByPath(path);
 	if (!file || !(file instanceof TFile)) return null;
 
-	const content = await app.vault.read(file as TFile);
+	const content = await app.vault.read(file);
 	const map = parseChapterFile(content);
 	verseCache.set(path, map);
 	return map;
@@ -393,19 +393,19 @@ export async function fetchVerses(
 	ref: ScriptureRef
 ): Promise<{ verse: number; text: string }[]> {
 	if (ref.crossChapter) {
-		throw "Cross-chapter ranges not supported yet.";
+		throw new Error("Cross-chapter ranges not supported yet.");
 	}
 
 	const map = await loadChapter(app, csbFolder, ref.book, ref.chapter);
 	if (!map) {
-		throw `Passage not found: ${ref.raw}`;
+		throw new Error(`Passage not found: ${ref.raw}`);
 	}
 
 	const results: { verse: number; text: string }[] = [];
 	for (let v = ref.verseStart; v <= ref.verseEnd; v++) {
 		const text = map.get(v);
 		if (text === undefined) {
-			throw `Passage not found: ${ref.raw}`;
+			throw new Error(`Passage not found: ${ref.raw}`);
 		}
 		results.push({ verse: v, text });
 	}
@@ -587,7 +587,7 @@ export class ScriptureExpander {
 		} catch (err: unknown) {
 			expandEl.empty();
 			expandEl.className = "preach-scripture-expand preach-scripture-expand--error";
-			const msg = typeof err === "string" ? err : `Could not load ${ref.raw}`;
+			const msg = err instanceof Error ? err.message : `Could not load ${ref.raw}`;
 			expandEl.createEl("span", { cls: "preach-scripture-error-text", text: msg });
 
 			expandEl.addEventListener("pointerdown", (e: PointerEvent) => {
