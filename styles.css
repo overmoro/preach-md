@@ -1,0 +1,400 @@
+/* Preach MD - styles.css
+   All variables prefixed with --preach-* so themes can override.
+*/
+
+/* ------------------------------------------------------------------ */
+/* Variables                                                           */
+/* ------------------------------------------------------------------ */
+
+.preach-md-root {
+	/* Typography */
+	--preach-font-family: Georgia, "Times New Roman", serif;
+	--preach-font-size: 1.35rem;
+	--preach-line-height: 1.85;
+	--preach-max-width: 780px;
+	--preach-content-padding: 2rem 1.75rem 8rem;
+
+	/* Colours */
+	--preach-bg: #0e0e0e;
+	--preach-text: #f0ede8;
+	--preach-heading-color: #ffffff;
+	--preach-muted: #888;
+	--preach-accent: #c9a84c;
+
+	/* Corners */
+	--preach-corner-size: 48px;
+	--preach-corner-bg: rgba(255, 255, 255, 0.08);
+	--preach-corner-hover-bg: rgba(255, 255, 255, 0.15);
+	--preach-corner-color: #ccc;
+	--preach-corner-radius: 10px;
+
+	/* Timer */
+	--preach-timer-bg: rgba(255, 255, 255, 0.07);
+	--preach-timer-color: #ccc;
+	--preach-timer-warn-bg: rgba(200, 140, 0, 0.25);
+	--preach-timer-warn-color: #e8a800;
+	--preach-timer-crit-bg: rgba(180, 30, 30, 0.3);
+	--preach-timer-crit-color: #ff5c5c;
+
+	/* Outline overlay */
+	--preach-overlay-bg: rgba(0, 0, 0, 0.75);
+	--preach-panel-bg: #1a1a1a;
+	--preach-panel-item-hover: #2a2a2a;
+	--preach-panel-width: min(90vw, 420px);
+}
+
+/* ------------------------------------------------------------------ */
+/* Root container                                                       */
+/* ------------------------------------------------------------------ */
+
+.preach-md-root {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	background: var(--preach-bg);
+	color: var(--preach-text);
+	overflow: hidden;
+	/* Prevent the Obsidian workspace from showing any chrome */
+}
+
+/* Hide Obsidian sidebars when preach view is active as a tab */
+.workspace-leaf-content[data-type="preach-md-view"] {
+	background: var(--preach-bg, #0e0e0e);
+}
+
+/* ------------------------------------------------------------------ */
+/* Scrollable content                                                   */
+/* ------------------------------------------------------------------ */
+
+.preach-content {
+	position: absolute;
+	inset: 0;
+	overflow-y: auto;
+	overflow-x: hidden;
+	-webkit-overflow-scrolling: touch;
+	scroll-behavior: auto; /* programmatic scrolls use scrollIntoView */
+}
+
+/* No accidental tap targets in the content area */
+.preach-content * {
+	-webkit-tap-highlight-color: transparent;
+}
+
+/* ------------------------------------------------------------------ */
+/* Body typography                                                      */
+/* ------------------------------------------------------------------ */
+
+.preach-body {
+	max-width: var(--preach-max-width);
+	margin: 0 auto;
+	padding: var(--preach-content-padding);
+	font-family: var(--preach-font-family);
+	font-size: var(--preach-font-size);
+	line-height: var(--preach-line-height);
+	color: var(--preach-text);
+}
+
+.preach-body h1,
+.preach-body h2,
+.preach-body h3,
+.preach-body h4,
+.preach-body h5,
+.preach-body h6 {
+	color: var(--preach-heading-color);
+	font-family: var(--preach-font-family);
+	margin-top: 2rem;
+	margin-bottom: 0.5rem;
+	line-height: 1.3;
+}
+
+.preach-body h2 {
+	font-size: 1.65rem;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+	padding-bottom: 0.4rem;
+	margin-top: 3rem;
+}
+
+.preach-body h3 {
+	font-size: 1.35rem;
+}
+
+.preach-body p {
+	margin: 0 0 1.2em;
+}
+
+.preach-body blockquote {
+	border-left: 3px solid var(--preach-accent);
+	margin: 1.5rem 0;
+	padding: 0.5rem 1.25rem;
+	color: #d4cecc;
+	font-style: italic;
+}
+
+.preach-body hr {
+	border: none;
+	border-top: 1px solid rgba(255, 255, 255, 0.12);
+	margin: 2rem 0;
+}
+
+.preach-body ul,
+.preach-body ol {
+	padding-left: 1.5rem;
+	margin-bottom: 1.2em;
+}
+
+.preach-body li {
+	margin-bottom: 0.4em;
+}
+
+.preach-body strong {
+	color: #fff;
+	font-weight: 700;
+}
+
+.preach-body em {
+	color: #d0cbc6;
+}
+
+.preach-body a {
+	color: var(--preach-accent);
+	text-decoration: none;
+}
+
+/* Callouts - minimal dark variant */
+.preach-body .callout {
+	background: rgba(255, 255, 255, 0.04);
+	border-left: 3px solid var(--preach-accent);
+	border-radius: 4px;
+	padding: 0.75rem 1rem;
+	margin: 1.5rem 0;
+}
+
+.preach-body .callout-title {
+	font-weight: 700;
+	font-size: 0.9rem;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--preach-accent);
+	margin-bottom: 0.4rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* Timer                                                                */
+/* ------------------------------------------------------------------ */
+
+.preach-timer-wrap {
+	position: absolute;
+	top: 12px;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 20;
+	pointer-events: none; /* wrap doesn't intercept, only the pill does */
+}
+
+.preach-timer {
+	display: inline-block;
+	background: var(--preach-timer-bg);
+	color: var(--preach-timer-color);
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	font-size: 0.78rem;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0.08em;
+	padding: 4px 12px;
+	border-radius: 20px;
+	cursor: pointer;
+	pointer-events: all;
+	user-select: none;
+	transition: background 0.3s, color 0.3s;
+}
+
+.preach-timer[data-state="warn"] {
+	background: var(--preach-timer-warn-bg);
+	color: var(--preach-timer-warn-color);
+}
+
+.preach-timer[data-state="crit"] {
+	background: var(--preach-timer-crit-bg);
+	color: var(--preach-timer-crit-color);
+}
+
+.preach-timer--confirm {
+	background: rgba(255, 255, 255, 0.12) !important;
+	color: #fff !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* Corner controls                                                      */
+/* ------------------------------------------------------------------ */
+
+.preach-corners {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	z-index: 20;
+}
+
+.preach-corner {
+	position: absolute;
+	width: var(--preach-corner-size);
+	height: var(--preach-corner-size);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: var(--preach-corner-bg);
+	color: var(--preach-corner-color);
+	border: none;
+	border-radius: var(--preach-corner-radius);
+	cursor: pointer;
+	pointer-events: all;
+	margin: 10px;
+	-webkit-tap-highlight-color: transparent;
+	touch-action: manipulation;
+	transition: background 0.15s;
+}
+
+.preach-corner:active,
+.preach-corner:hover {
+	background: var(--preach-corner-hover-bg);
+}
+
+.preach-corner--top-left {
+	top: 0;
+	left: 0;
+}
+
+.preach-corner-wrap {
+	position: absolute;
+	pointer-events: none;
+}
+
+.preach-corner-wrap--top-right {
+	top: 0;
+	right: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	margin: 10px;
+}
+
+.preach-corner-wrap--top-right .preach-corner {
+	position: static;
+	margin: 0;
+	pointer-events: all;
+}
+
+.preach-corner--bottom-right {
+	bottom: 0;
+	right: 0;
+}
+
+.preach-corner--bottom-left {
+	bottom: 0;
+	left: 0;
+}
+
+/* Reserved bottom-left slot for Session 2 highlight toggle */
+.preach-corner--reserved {
+	opacity: 0;
+	pointer-events: none;
+}
+
+/* ------------------------------------------------------------------ */
+/* Exit confirm chip                                                    */
+/* ------------------------------------------------------------------ */
+
+.preach-exit-chip {
+	display: inline-block;
+	background: rgba(200, 50, 50, 0.85);
+	color: #fff;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	font-size: 0.72rem;
+	font-weight: 600;
+	padding: 3px 10px;
+	border-radius: 12px;
+	margin-bottom: 4px;
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.15s;
+}
+
+.preach-exit-chip--visible {
+	opacity: 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Outline overlay                                                      */
+/* ------------------------------------------------------------------ */
+
+.preach-outline-overlay {
+	position: absolute;
+	inset: 0;
+	background: var(--preach-overlay-bg);
+	z-index: 30;
+	display: flex;
+	align-items: flex-start;
+	justify-content: flex-start;
+	padding: 70px 0 0 10px;
+	-webkit-backdrop-filter: blur(4px);
+	backdrop-filter: blur(4px);
+	transition: opacity 0.15s;
+}
+
+.preach-outline-overlay--hidden {
+	display: none;
+}
+
+.preach-outline-panel {
+	background: var(--preach-panel-bg);
+	border-radius: 12px;
+	padding: 12px 8px;
+	width: var(--preach-panel-width);
+	max-height: calc(100vh - 100px);
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.preach-outline-item {
+	display: block;
+	width: 100%;
+	text-align: left;
+	background: none;
+	border: none;
+	color: var(--preach-text);
+	font-family: var(--preach-font-family);
+	font-size: 1rem;
+	line-height: 1.4;
+	padding: 10px 14px;
+	border-radius: 8px;
+	cursor: pointer;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+	transition: background 0.1s;
+}
+
+.preach-outline-item:hover,
+.preach-outline-item:active {
+	background: var(--preach-panel-item-hover);
+}
+
+.preach-outline-empty {
+	color: var(--preach-muted);
+	font-size: 0.9rem;
+	padding: 8px 14px;
+	margin: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive: narrow screens / phones                                  */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 480px) {
+	.preach-body {
+		--preach-font-size: 1.15rem;
+		padding: 1.25rem 1rem 8rem;
+	}
+
+	.preach-body h2 {
+		font-size: 1.35rem;
+	}
+}

@@ -1,0 +1,10 @@
+{
+  "id": "preach-md",
+  "name": "Preach MD",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Distraction-free preach mode for sermon notes. Optimised for iPad delivery.",
+  "author": "overmoro",
+  "authorUrl": "https://github.com/overmoro",
+  "isDesktopOnly": false
+}
