@@ -495,7 +495,7 @@ export class ScriptureExpander {
 
 				span.addEventListener("pointerdown", (e: PointerEvent) => {
 					e.stopPropagation();
-					this.handleTap(span, ref);
+					void this.handleTap(span, ref);
 				});
 
 				frag.appendChild(span);

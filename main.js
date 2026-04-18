@@ -876,7 +876,7 @@ var ScriptureExpander = class {
         });
         span.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
-          this.handleTap(span, ref);
+          void this.handleTap(span, ref);
         });
         frag.appendChild(span);
         cursor = ref.index + ref.length;
@@ -1178,12 +1178,10 @@ var PreachView = class extends import_obsidian2.ItemView {
     this.openOutline();
   }
   openOutline() {
+    var _a;
     if (!this.file)
       return;
-    let panel = this.overlayEl.querySelector(".preach-outline-panel");
-    if (!panel) {
-      panel = this.overlayEl.createEl("div", { cls: "preach-outline-panel" });
-    }
+    const panel = (_a = this.overlayEl.querySelector(".preach-outline-panel")) != null ? _a : this.overlayEl.createEl("div", { cls: "preach-outline-panel" });
     panel.empty();
     const level = this.plugin.settings.sectionHeadingLevel;
     const tag = `h${level}`;
@@ -1195,10 +1193,10 @@ var PreachView = class extends import_obsidian2.ItemView {
       });
     } else {
       headingEls.forEach((el) => {
-        var _a;
+        var _a2;
         const btn = panel.createEl("button", {
           cls: "preach-outline-item",
-          text: (_a = el.textContent) != null ? _a : ""
+          text: (_a2 = el.textContent) != null ? _a2 : ""
         });
         btn.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
@@ -1251,7 +1249,7 @@ var PreachView = class extends import_obsidian2.ItemView {
     } else {
       const leaf = this.app.workspace.getLeaf(false);
       if (this.file) {
-        leaf.openFile(this.file, { active: true });
+        void leaf.openFile(this.file, { active: true });
       }
     }
   }
@@ -1262,7 +1260,7 @@ var PreachView = class extends import_obsidian2.ItemView {
         const nav = navigator;
         this.wakeLock = await nav.wakeLock.request("screen");
       }
-    } catch (_e) {
+    } catch (e) {
     }
   }
   async releaseWakeLock() {
@@ -1271,7 +1269,7 @@ var PreachView = class extends import_obsidian2.ItemView {
         await this.wakeLock.release();
         this.wakeLock = null;
       }
-    } catch (_err) {
+    } catch (e) {
     }
   }
   // Suppress edge-swipe gestures (Obsidian Mobile sidebar open)
@@ -1316,7 +1314,6 @@ var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian3.Setting(containerEl).setName("Preach MD").setHeading();
     new import_obsidian3.Setting(containerEl).setName("Timer").setHeading();
     new import_obsidian3.Setting(containerEl).setName("Target duration (minutes)").setDesc("The countdown starts from this value.").addText(
       (text) => text.setPlaceholder("30").setValue(String(this.plugin.settings.targetMinutes)).onChange((value) => {
@@ -1359,7 +1356,7 @@ var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
     );
     new import_obsidian3.Setting(containerEl).setName("Scripture").setHeading();
     new import_obsidian3.Setting(containerEl).setName("Bible folder path").setDesc(
-      "Vault-relative path to your Bible chapter files. Each book should be a folder with files named like 'John 3.md'."
+      "Vault path to your bible chapter files. Each book is a subfolder; each chapter is a separate .md file."
     ).addText(
       (text) => text.setPlaceholder("30_Knowledge/Theology/Bible/CSB").setValue(this.plugin.settings.csbFolderPath).onChange((value) => {
         this.plugin.settings.csbFolderPath = value.trim();
@@ -1382,7 +1379,7 @@ var PreachMDPlugin = class extends import_obsidian4.Plugin {
       name: "Open preach mode",
       callback: () => this.openPreachMode()
     });
-    this.addRibbonIcon("book-open", "Preach MD: open preach mode", () => {
+    this.addRibbonIcon("book-open", "Open preach mode", () => {
       void this.openPreachMode();
     });
     this.addSettingTab(new PreachMDSettingTab(this.app, this));

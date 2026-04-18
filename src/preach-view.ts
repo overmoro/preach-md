@@ -326,10 +326,9 @@ export class PreachView extends ItemView {
 		if (!this.file) return;
 
 		// Rebuild panel each time (file may have changed)
-		let panel = this.overlayEl.querySelector<HTMLElement>(".preach-outline-panel");
-		if (!panel) {
-			panel = this.overlayEl.createEl("div", { cls: "preach-outline-panel" });
-		}
+		const panel =
+			this.overlayEl.querySelector<HTMLElement>(".preach-outline-panel") ??
+			this.overlayEl.createEl("div", { cls: "preach-outline-panel" });
 		panel.empty();
 
 		const level = this.plugin.settings.sectionHeadingLevel;
@@ -343,7 +342,7 @@ export class PreachView extends ItemView {
 			});
 		} else {
 			headingEls.forEach((el) => {
-				const btn = panel!.createEl("button", {
+				const btn = panel.createEl("button", {
 					cls: "preach-outline-item",
 					text: el.textContent ?? "",
 				});
@@ -407,7 +406,7 @@ export class PreachView extends ItemView {
 		} else {
 			const leaf = this.app.workspace.getLeaf(false);
 			if (this.file) {
-				leaf.openFile(this.file, { active: true });
+				void leaf.openFile(this.file, { active: true });
 			}
 		}
 	}
@@ -419,7 +418,7 @@ export class PreachView extends ItemView {
 				const nav = navigator as Navigator & { wakeLock: WakeLockAPI };
 				this.wakeLock = await nav.wakeLock.request("screen");
 			}
-		} catch (_e) {
+		} catch {
 			// Wake lock unavailable - non-fatal
 		}
 	}
@@ -430,7 +429,7 @@ export class PreachView extends ItemView {
 				await this.wakeLock.release();
 				this.wakeLock = null;
 			}
-		} catch (_err) {
+		} catch {
 			// Ignore release errors
 		}
 	}

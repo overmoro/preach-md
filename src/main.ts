@@ -22,7 +22,7 @@ export default class PreachMDPlugin extends Plugin {
 		});
 
 		// Ribbon icon
-		this.addRibbonIcon("book-open", "Preach MD: open preach mode", () => {
+		this.addRibbonIcon("book-open", "Open preach mode", () => {
 			void this.openPreachMode();
 		});
 

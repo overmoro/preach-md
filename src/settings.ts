@@ -29,8 +29,6 @@ export class PreachMDSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 
-		new Setting(containerEl).setName("Preach MD").setHeading();
-
 		// Timer thresholds
 		new Setting(containerEl).setName("Timer").setHeading();
 
@@ -109,7 +107,7 @@ export class PreachMDSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Bible folder path")
 			.setDesc(
-				"Vault-relative path to your Bible chapter files. Each book should be a folder with files named like 'John 3.md'."
+				"Vault path to your bible chapter files. Each book is a subfolder; each chapter is a separate .md file."
 			)
 			.addText((text) =>
 				text
