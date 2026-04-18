@@ -82,6 +82,9 @@ export class PreachView extends ItemView {
 	private highlightManager!: HighlightManager;
 	private scriptureExpander!: ScriptureExpander;
 
+	// View header (hidden while preach mode is active)
+	private viewHeaderEl: HTMLElement | null = null;
+
 	constructor(leaf: WorkspaceLeaf, plugin: PreachMDPlugin) {
 		super(leaf);
 		this.plugin = plugin;
@@ -100,6 +103,13 @@ export class PreachView extends ItemView {
 	}
 
 	async onOpen(): Promise<void> {
+		// Hide the leaf's view-header (tab/title bar) for a cleaner preach surface
+		const leafContent = this.containerEl.closest<HTMLElement>(".workspace-leaf-content");
+		if (leafContent) {
+			this.viewHeaderEl = leafContent.querySelector<HTMLElement>(".view-header");
+			if (this.viewHeaderEl) this.viewHeaderEl.style.display = "none";
+		}
+
 		this.renderComponent = new Component();
 		this.renderComponent.load();
 
@@ -127,6 +137,12 @@ export class PreachView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		// Restore the view-header when leaving preach mode
+		if (this.viewHeaderEl) {
+			this.viewHeaderEl.style.display = "";
+			this.viewHeaderEl = null;
+		}
+
 		this.timer.stop();
 		await this.releaseWakeLock();
 		this.restoreEdgeSwipes();

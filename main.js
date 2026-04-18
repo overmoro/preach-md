@@ -986,6 +986,8 @@ var PreachView = class extends import_obsidian2.ItemView {
     // Exit confirm state
     this.exitConfirming = false;
     this.exitConfirmTimeout = null;
+    // View header (hidden while preach mode is active)
+    this.viewHeaderEl = null;
     this.plugin = plugin;
   }
   getViewType() {
@@ -998,6 +1000,12 @@ var PreachView = class extends import_obsidian2.ItemView {
     return "book-open";
   }
   async onOpen() {
+    const leafContent = this.containerEl.closest(".workspace-leaf-content");
+    if (leafContent) {
+      this.viewHeaderEl = leafContent.querySelector(".view-header");
+      if (this.viewHeaderEl)
+        this.viewHeaderEl.style.display = "none";
+    }
     this.renderComponent = new import_obsidian2.Component();
     this.renderComponent.load();
     this.highlightManager = new HighlightManager(
@@ -1020,6 +1028,10 @@ var PreachView = class extends import_obsidian2.ItemView {
     this.timer.start();
   }
   async onClose() {
+    if (this.viewHeaderEl) {
+      this.viewHeaderEl.style.display = "";
+      this.viewHeaderEl = null;
+    }
     this.timer.stop();
     await this.releaseWakeLock();
     this.restoreEdgeSwipes();
