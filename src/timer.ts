@@ -37,7 +37,7 @@ export class PreachTimer {
 		this.el.dataset.runState = "idle";
 
 		this.labelEl = container.createEl("div", { cls: "preach-timer-label" });
-		this.labelEl.textContent = "Tap to start";
+		this.labelEl.textContent = "Start";
 
 		this.el.addEventListener("pointerdown", (e) => {
 			e.stopPropagation();
@@ -174,11 +174,11 @@ export class PreachTimer {
 
 		// Label
 		if (this.runState === "idle") {
-			this.labelEl.textContent = "Tap to start";
+			this.labelEl.textContent = "Start";
 		} else if (this.runState === "running") {
-			this.labelEl.textContent = "Tap to pause";
+			this.labelEl.textContent = "Pause";
 		} else {
-			this.labelEl.textContent = "Tap to resume  |  Double-tap to reset";
+			this.labelEl.textContent = "Resume | Reset";
 		}
 	}
 }
