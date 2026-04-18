@@ -6,7 +6,7 @@
 // See: https://github.com/kuchejak/obsidian-bible-linker
 // Used under MIT licence.
 
-import { App, TFile } from "obsidian";
+import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
 // ---------------------------------------------------------------------------
 // Book name normalisation
@@ -233,11 +233,86 @@ export function parseReferences(text: string): (ScriptureRef & { index: number; 
 const verseCache = new Map<string, Map<number, string>>();
 
 /**
+ * Maps each canonical book name to the filename prefix used inside its
+ * CSB vault folder. The chapter file is "{prefix} {chapter}.md".
+ */
+const CHAPTER_PREFIX: Record<string, string> = {
+	"Genesis": "Gen",
+	"Exodus": "Exod",
+	"Leviticus": "Lev",
+	"Numbers": "Num",
+	"Deuteronomy": "Deut",
+	"Joshua": "Josh",
+	"Judges": "Judg",
+	"Ruth": "Ruth",
+	"1 Samuel": "1 Sam",
+	"2 Samuel": "2 Sam",
+	"1 Kings": "1 Kgs",
+	"2 Kings": "2 Kgs",
+	"1 Chronicles": "1 Chr",
+	"2 Chronicles": "2 Chr",
+	"Ezra": "Ezr",
+	"Nehemiah": "Neh",
+	"Esther": "Esth",
+	"Job": "Job",
+	"Psalms": "Ps",
+	"Proverbs": "Prov",
+	"Ecclesiastes": "Eccl",
+	"Song of Solomon": "Song",
+	"Isaiah": "Isa",
+	"Jeremiah": "Jer",
+	"Lamentations": "Lam",
+	"Ezekiel": "Ezek",
+	"Daniel": "Dan",
+	"Hosea": "Hos",
+	"Joel": "Joel",
+	"Amos": "Amos",
+	"Obadiah": "Obad",
+	"Jonah": "Jonah",
+	"Micah": "Mic",
+	"Nahum": "Nah",
+	"Habakkuk": "Hab",
+	"Zephaniah": "Zeph",
+	"Haggai": "Hag",
+	"Zechariah": "Zech",
+	"Malachi": "Mal",
+	"Matthew": "Matt",
+	"Mark": "Mark",
+	"Luke": "Luke",
+	"John": "John",
+	"Acts": "Acts",
+	"Romans": "Rom",
+	"1 Corinthians": "1 Cor",
+	"2 Corinthians": "2 Cor",
+	"Galatians": "Gal",
+	"Ephesians": "Eph",
+	"Philippians": "Phil",
+	"Colossians": "Col",
+	"1 Thessalonians": "1 Thess",
+	"2 Thessalonians": "2 Thess",
+	"1 Timothy": "1 Tim",
+	"2 Timothy": "2 Tim",
+	"Titus": "Titus",
+	"Philemon": "Phlm",
+	"Hebrews": "Heb",
+	"James": "Jas",
+	"1 Peter": "1 Pet",
+	"2 Peter": "2 Pet",
+	"1 John": "1 John",
+	"2 John": "2 John",
+	"3 John": "3 John",
+	"Jude": "Jude",
+	"Revelation": "Rev",
+};
+
+/**
  * Build the vault path to a chapter file.
- * Pattern: {csbFolder}/{Book}/{Book} {Chapter}.md
+ * Pattern: {csbFolder}/{Book}/{prefix} {Chapter}.md
+ * where {prefix} is the abbreviated filename prefix used in the CSB vault.
  */
 function chapterPath(csbFolder: string, book: string, chapter: number): string {
-	return `${csbFolder}/${book}/${book} ${chapter}.md`;
+	const prefix = CHAPTER_PREFIX[book] ?? book;
+	return `${csbFolder}/${book}/${prefix} ${chapter}.md`;
 }
 
 /**
@@ -270,7 +345,11 @@ function parseChapterFile(content: string): Map<number, string> {
 				currentVerse = null;
 				currentLines = [];
 			} else if (line.trim().length > 0) {
-				currentLines.push(line.trim());
+				// Strip inline section headings (e.g. "## Heading" embedded mid-line)
+				const stripped = line.replace(/\s*#{2,5}\s+[^#\n]+/g, "").trim();
+				if (stripped.length > 0) {
+					currentLines.push(stripped);
+				}
 			}
 		}
 	}
@@ -341,17 +420,25 @@ export async function fetchVerses(
 export class ScriptureExpander {
 	private app: App;
 	private csbFolder: string;
+	private component: Component;
+	private sourcePath: string;
 
 	/** Track which refs are currently expanded: span element -> expanded div. */
 	private expanded = new Map<HTMLElement, HTMLElement>();
 
-	constructor(app: App, csbFolder: string) {
+	constructor(app: App, csbFolder: string, component: Component, sourcePath: string) {
 		this.app = app;
 		this.csbFolder = csbFolder;
+		this.component = component;
+		this.sourcePath = sourcePath;
 	}
 
 	updateFolder(csbFolder: string): void {
 		this.csbFolder = csbFolder;
+	}
+
+	updateSourcePath(sourcePath: string): void {
+		this.sourcePath = sourcePath;
 	}
 
 	/**
@@ -465,7 +552,8 @@ export class ScriptureExpander {
 				const row = expandEl.createEl("span", { cls: "preach-scripture-verse" });
 				const num = row.createEl("sup", { cls: "preach-scripture-verse-num", text: String(verse) });
 				row.appendChild(num);
-				row.appendChild(document.createTextNode(" " + text + " "));
+				const textEl = row.createEl("span", { cls: "preach-scripture-verse-text" });
+				await MarkdownRenderer.render(this.app, text, textEl, this.sourcePath, this.component);
 			}
 
 			// Tap on the expansion itself collapses it

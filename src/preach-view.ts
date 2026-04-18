@@ -111,7 +111,9 @@ export class PreachView extends ItemView {
 		);
 		this.scriptureExpander = new ScriptureExpander(
 			this.app,
-			this.plugin.settings.csbFolderPath
+			this.plugin.settings.csbFolderPath,
+			this.renderComponent,
+			""
 		);
 
 		this.buildUI();
@@ -303,6 +305,7 @@ export class PreachView extends ItemView {
 		}
 
 		// Scripture detection pass
+		this.scriptureExpander.updateSourcePath(file.path);
 		this.scriptureExpander.processElement(body);
 
 		// Tag headings so outline works
