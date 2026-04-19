@@ -1025,6 +1025,13 @@ var PreachView = class extends import_obsidian2.ItemView {
     if (this.file) {
       await this.renderFile(this.file);
     }
+    this.registerEvent(
+      this.app.vault.on("modify", (modified) => {
+        if (this.file && modified.path === this.file.path) {
+          void this.renderFile(this.file);
+        }
+      })
+    );
     this.timer.start();
   }
   async onClose() {

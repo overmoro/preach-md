@@ -133,6 +133,15 @@ export class PreachView extends ItemView {
 			await this.renderFile(this.file);
 		}
 
+		// Re-render when the source file is saved (e.g. after editing)
+		this.registerEvent(
+			this.app.vault.on("modify", (modified) => {
+				if (this.file && modified.path === this.file.path) {
+					void this.renderFile(this.file);
+				}
+			})
+		);
+
 		this.timer.start();
 	}
 
