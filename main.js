@@ -848,7 +848,7 @@ var ScriptureExpander = class {
     if (node.nodeType === Node.ELEMENT_NODE) {
       const el = node;
       const tag = el.tagName.toLowerCase();
-      if (tag === "pre" || tag === "code" || el.classList.contains("callout") || el.classList.contains("preach-scripture-ref") || el.classList.contains("preach-scripture-expand")) {
+      if (tag === "pre" || tag === "code" || el.classList.contains("preach-scripture-ref") || el.classList.contains("preach-scripture-expand")) {
         return;
       }
     }

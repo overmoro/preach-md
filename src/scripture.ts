@@ -457,7 +457,6 @@ export class ScriptureExpander {
 			if (
 				tag === "pre" ||
 				tag === "code" ||
-				el.classList.contains("callout") ||
 				el.classList.contains("preach-scripture-ref") ||
 				el.classList.contains("preach-scripture-expand")
 			) {
