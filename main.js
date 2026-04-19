@@ -1004,7 +1004,7 @@ var PreachView = class extends import_obsidian2.ItemView {
     if (leafContent) {
       this.viewHeaderEl = leafContent.querySelector(".view-header");
       if (this.viewHeaderEl)
-        this.viewHeaderEl.style.display = "none";
+        this.viewHeaderEl.classList.add("preach-view-header--hidden");
     }
     this.renderComponent = new import_obsidian2.Component();
     this.renderComponent.load();
@@ -1029,7 +1029,7 @@ var PreachView = class extends import_obsidian2.ItemView {
   }
   async onClose() {
     if (this.viewHeaderEl) {
-      this.viewHeaderEl.style.display = "";
+      this.viewHeaderEl.classList.remove("preach-view-header--hidden");
       this.viewHeaderEl = null;
     }
     this.timer.stop();

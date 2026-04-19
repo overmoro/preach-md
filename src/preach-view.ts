@@ -107,7 +107,7 @@ export class PreachView extends ItemView {
 		const leafContent = this.containerEl.closest<HTMLElement>(".workspace-leaf-content");
 		if (leafContent) {
 			this.viewHeaderEl = leafContent.querySelector<HTMLElement>(".view-header");
-			if (this.viewHeaderEl) this.viewHeaderEl.style.display = "none";
+			if (this.viewHeaderEl) this.viewHeaderEl.classList.add("preach-view-header--hidden");
 		}
 
 		this.renderComponent = new Component();
@@ -139,7 +139,7 @@ export class PreachView extends ItemView {
 	async onClose(): Promise<void> {
 		// Restore the view-header when leaving preach mode
 		if (this.viewHeaderEl) {
-			this.viewHeaderEl.style.display = "";
+			this.viewHeaderEl.classList.remove("preach-view-header--hidden");
 			this.viewHeaderEl = null;
 		}
 
