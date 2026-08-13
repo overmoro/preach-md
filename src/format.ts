@@ -21,6 +21,25 @@ export interface CaptureResult {
 	rect: DOMRect;
 }
 
+/** Why a format action could not be applied. */
+export type FormatFailReason =
+	| "scripture-expand"
+	| "cross-block"
+	| "not-found"
+	| "collision";
+
+/**
+ * Text shown for each bail condition. A total record rather than a lookup with
+ * a fallback, so adding a reason to the union without a message is a compile
+ * error, and no key can resolve through Object.prototype.
+ */
+const FORMAT_FAIL_MESSAGE: Record<FormatFailReason, string> = {
+	"scripture-expand": "Can't format inside an expanded passage.",
+	"cross-block": "Can't format across two paragraphs.",
+	"not-found": "Can't find that text in the note source.",
+	collision: "That text is already formatted.",
+};
+
 export class FormatManager {
 	private app: App;
 	private file: TFile | null;
@@ -156,56 +175,6 @@ export class FormatManager {
 	}
 
 	/**
-	 * Called from a pointerdown handler on a format button in the editor.
-	 * Must read window.getSelection() immediately before focus changes lose it.
-	 */
-	captureCurrentSelection(scrollEl: HTMLElement): boolean {
-		const sel = window.getSelection();
-		if (!sel || sel.isCollapsed || sel.rangeCount === 0) return false;
-
-		const selectedText = sel.toString().trim();
-		if (!selectedText) return false;
-
-		// Walk anchor node up to find .preach-block
-		let node: Node | null = sel.anchorNode;
-		let blockEl: HTMLElement | null = null;
-		while (node) {
-			if (node.instanceOf(HTMLElement)) {
-				if (node.classList.contains("preach-scripture-expand")) return false;
-				if (node.classList.contains("preach-block")) {
-					blockEl = node;
-					break;
-				}
-			}
-			node = node.parentNode;
-		}
-
-		if (!blockEl) return false;
-
-		// Check selection doesn't span multiple preach-blocks
-		const focusNode = sel.focusNode;
-		let focusBlockEl: HTMLElement | null = null;
-		let fn: Node | null = focusNode;
-		while (fn) {
-			if (fn.instanceOf(HTMLElement) && fn.classList.contains("preach-block")) {
-				focusBlockEl = fn;
-				break;
-			}
-			fn = fn.parentNode;
-		}
-		if (focusBlockEl !== blockEl) {
-			console.warn("preach-md format: selection spans multiple blocks, ignoring");
-			return false;
-		}
-
-		const blockIndex = parseInt(blockEl.dataset.blockIndex ?? "", 10);
-		if (isNaN(blockIndex)) return false;
-
-		this.capturedSelection = { text: selectedText, blockIndex };
-		return true;
-	}
-
-	/**
 	 * Apply a format wrapper around the previously captured selection.
 	 * Writes to the source file via vault.process().
 	 */
@@ -235,7 +204,10 @@ export class FormatManager {
 		}
 
 		if (sourceIdx === -1) {
-			console.warn("preach-md format: could not locate selected text in source block, ignoring");
+			// Same condition captureFromSelection reports, reached on the apply
+			// side instead. It used to warn to the console, so a format tap that
+			// could not be applied did nothing at all from the user's side.
+			this.showFormatFailNotice("not-found");
 			return;
 		}
 
@@ -256,14 +228,17 @@ export class FormatManager {
 	}
 
 	/** Show a brief notice near the selection area that formatting failed. */
-	showFormatFailNotice(reason: string): void {
+	showFormatFailNotice(reason: FormatFailReason): void {
 		// Ensure a single notice element exists
 		if (!this.noticeEl) {
 			this.noticeEl = createDiv();
 			this.noticeEl.className = "preach-format-fail-notice";
-			this.noticeEl.textContent = "Can't format here. Use the edit button for changes.";
 			this.noticeEl.addEventListener("pointerdown", () => this.hideFormatFailNotice());
 		}
+
+		// Set on every call, not just on creation: the element is reused, so a
+		// later failure would otherwise show the previous reason's message.
+		this.noticeEl.textContent = FORMAT_FAIL_MESSAGE[reason];
 
 		// Attach to body if not already
 		if (!this.noticeEl.isConnected) {

@@ -1007,6 +1007,12 @@ var FORMAT_BOLD = { open: "**", close: "**" };
 var FORMAT_ITALIC = { open: "*", close: "*" };
 var FORMAT_UNDERLINE = { open: "<u>", close: "</u>" };
 var FORMAT_HIGHLIGHT = { open: "==", close: "==" };
+var FORMAT_FAIL_MESSAGE = {
+  "scripture-expand": "Can't format inside an expanded passage.",
+  "cross-block": "Can't format across two paragraphs.",
+  "not-found": "Can't find that text in the note source.",
+  collision: "That text is already formatted."
+};
 var FormatManager = class {
   constructor(app, file) {
     this.blocks = [];
@@ -1118,53 +1124,6 @@ var FormatManager = class {
     return { rect };
   }
   /**
-   * Called from a pointerdown handler on a format button in the editor.
-   * Must read window.getSelection() immediately before focus changes lose it.
-   */
-  captureCurrentSelection(scrollEl) {
-    var _a;
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || sel.rangeCount === 0)
-      return false;
-    const selectedText = sel.toString().trim();
-    if (!selectedText)
-      return false;
-    let node = sel.anchorNode;
-    let blockEl = null;
-    while (node) {
-      if (node.instanceOf(HTMLElement)) {
-        if (node.classList.contains("preach-scripture-expand"))
-          return false;
-        if (node.classList.contains("preach-block")) {
-          blockEl = node;
-          break;
-        }
-      }
-      node = node.parentNode;
-    }
-    if (!blockEl)
-      return false;
-    const focusNode = sel.focusNode;
-    let focusBlockEl = null;
-    let fn = focusNode;
-    while (fn) {
-      if (fn.instanceOf(HTMLElement) && fn.classList.contains("preach-block")) {
-        focusBlockEl = fn;
-        break;
-      }
-      fn = fn.parentNode;
-    }
-    if (focusBlockEl !== blockEl) {
-      console.warn("preach-md format: selection spans multiple blocks, ignoring");
-      return false;
-    }
-    const blockIndex = parseInt((_a = blockEl.dataset.blockIndex) != null ? _a : "", 10);
-    if (isNaN(blockIndex))
-      return false;
-    this.capturedSelection = { text: selectedText, blockIndex };
-    return true;
-  }
-  /**
    * Apply a format wrapper around the previously captured selection.
    * Writes to the source file via vault.process().
    */
@@ -1192,7 +1151,7 @@ var FormatManager = class {
       }
     }
     if (sourceIdx === -1) {
-      console.warn("preach-md format: could not locate selected text in source block, ignoring");
+      this.showFormatFailNotice("not-found");
       return;
     }
     const absoluteStart = block.startOffset + sourceIdx;
@@ -1207,9 +1166,9 @@ var FormatManager = class {
     if (!this.noticeEl) {
       this.noticeEl = createDiv();
       this.noticeEl.className = "preach-format-fail-notice";
-      this.noticeEl.textContent = "Can't format here. Use the edit button for changes.";
       this.noticeEl.addEventListener("pointerdown", () => this.hideFormatFailNotice());
     }
+    this.noticeEl.textContent = FORMAT_FAIL_MESSAGE[reason];
     if (!this.noticeEl.isConnected) {
       document.body.appendChild(this.noticeEl);
     }
@@ -2005,6 +1964,130 @@ var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
+  }
+  /**
+   * Declarative mirror of display(), so these settings are reachable from
+   * Obsidian's settings search on 1.13 and later.
+   *
+   * Added alongside display() rather than replacing it. Older Obsidian never
+   * calls this method, so minAppVersion stays at 1.4.0 and nobody is dropped
+   * for the sake of search.
+   */
+  getSettingDefinitions() {
+    return [
+      {
+        type: "group",
+        heading: "Timer",
+        items: [
+          {
+            name: "Target duration (minutes)",
+            desc: "The countdown starts from this value.",
+            aliases: ["countdown", "length", "sermon length"],
+            control: {
+              type: "number",
+              key: "targetMinutes",
+              defaultValue: DEFAULT_SETTINGS.targetMinutes,
+              placeholder: String(DEFAULT_SETTINGS.targetMinutes),
+              min: 1
+            }
+          },
+          {
+            name: "Amber warning (minutes remaining)",
+            desc: "Timer turns amber when this many minutes remain.",
+            aliases: ["warning", "orange"],
+            control: {
+              type: "number",
+              key: "warnMinutes",
+              defaultValue: DEFAULT_SETTINGS.warnMinutes,
+              placeholder: String(DEFAULT_SETTINGS.warnMinutes),
+              min: 1
+            }
+          },
+          {
+            name: "Red warning (minutes remaining)",
+            desc: "Timer turns red when this many minutes remain.",
+            aliases: ["warning", "critical"],
+            control: {
+              type: "number",
+              key: "critMinutes",
+              defaultValue: DEFAULT_SETTINGS.critMinutes,
+              placeholder: String(DEFAULT_SETTINGS.critMinutes),
+              min: 1
+            }
+          }
+        ]
+      },
+      {
+        type: "group",
+        heading: "Navigation",
+        items: [
+          {
+            name: "Section heading level",
+            desc: "Heading level used to build the outline (2 = ##, 3 = ###).",
+            aliases: ["outline", "sections"],
+            control: {
+              type: "number",
+              key: "sectionHeadingLevel",
+              defaultValue: DEFAULT_SETTINGS.sectionHeadingLevel,
+              placeholder: String(DEFAULT_SETTINGS.sectionHeadingLevel),
+              min: 1,
+              max: 6
+            }
+          }
+        ]
+      },
+      {
+        type: "group",
+        heading: "Scripture",
+        items: [
+          {
+            name: "Bible folder path",
+            desc: 'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file.',
+            aliases: ["bible", "csb", "scripture", "verses"],
+            control: {
+              type: "text",
+              key: "csbFolderPath",
+              defaultValue: DEFAULT_SETTINGS.csbFolderPath,
+              placeholder: DEFAULT_SETTINGS.csbFolderPath
+            }
+          }
+        ]
+      }
+    ];
+  }
+  /**
+   * Applies the same validation the imperative controls in display() apply,
+   * so a value typed into settings search cannot land somewhere the
+   * hand-built inputs would have rejected. An out-of-range value is ignored
+   * rather than clamped, matching display()'s behaviour of simply not
+   * assigning.
+   */
+  setControlValue(key, value) {
+    const settings = this.plugin.settings;
+    switch (key) {
+      case "targetMinutes":
+      case "warnMinutes":
+      case "critMinutes": {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n <= 0)
+          return;
+        settings[key] = n;
+        break;
+      }
+      case "sectionHeadingLevel": {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n < 1 || n > 6)
+          return;
+        settings.sectionHeadingLevel = n;
+        break;
+      }
+      case "csbFolderPath":
+        settings.csbFolderPath = String(value).trim();
+        break;
+      default:
+        return;
+    }
+    return this.plugin.saveSettings();
   }
   display() {
     const { containerEl } = this;

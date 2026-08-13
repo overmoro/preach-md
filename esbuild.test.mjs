@@ -9,15 +9,17 @@ import { fileURLToPath } from "url";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
-await esbuild.build({
-  entryPoints: [path.join(root, "src/scripture.ts")],
-  outfile: path.join(root, "tests/.build/scripture.mjs"),
-  bundle: true,
-  format: "esm",
-  platform: "node",
-  target: "es2020",
-  logLevel: "warning",
-  alias: {
-    obsidian: path.join(root, "tests/obsidian-stub.mjs"),
-  },
-});
+for (const name of ["scripture", "settings"]) {
+  await esbuild.build({
+    entryPoints: [path.join(root, `src/${name}.ts`)],
+    outfile: path.join(root, `tests/.build/${name}.mjs`),
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    target: "es2020",
+    logLevel: "warning",
+    alias: {
+      obsidian: path.join(root, "tests/obsidian-stub.mjs"),
+    },
+  });
+}
