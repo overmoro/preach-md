@@ -156,9 +156,19 @@ const BOOK_MAP: Record<string, BookName> = {
 	revelation: "Revelation", rev: "Revelation", re: "Revelation", rv: "Revelation",
 };
 
-/** Return the canonical book name, or null if not recognised. */
-export function normaliseBook(raw: string): string | null {
+/**
+ * Return the canonical book name, or null if not recognised.
+ *
+ * The own-property check matters: BOOK_MAP is a plain object, so a bare lookup
+ * also finds Object.prototype members. "Constructor 1:1" in a sermon would
+ * otherwise normalise to the Object constructor function rather than to null,
+ * and be rendered as a tappable reference whose book is not a string at all.
+ * Lowercasing means `constructor` and `__proto__` are the only keys that can
+ * collide, but the guard covers the class rather than those two names.
+ */
+export function normaliseBook(raw: string): BookName | null {
 	const key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+	if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key)) return null;
 	return BOOK_MAP[key] ?? null;
 }
 
@@ -333,13 +343,22 @@ type BookName = (typeof CANON)[number][0];
  * A well-formed canon row: [name, prefix], or [name, prefix, SINGLE_CHAPTER].
  *
  * The third field is typed as SINGLE_CHAPTER itself rather than as a boolean,
- * because the derivation below reads whether the field is present and not what
- * it holds. Writing `false` there to document "multi-chapter" would otherwise
- * mark the book single-chapter; this makes it a compile error instead.
+ * because the field is typed as the literal `true` rather than as a boolean, so
+ * a stray `false` written to document "multi-chapter" is a compile error rather
+ * than a value that quietly means something else.
  */
-type BookRow =
-	| readonly [string, string]
-	| readonly [string, string, typeof SINGLE_CHAPTER];
+type BookRow = readonly [string, string, (typeof SINGLE_CHAPTER)?];
+
+/**
+ * CANON widened to the row contract.
+ *
+ * The assignment is itself the shape check: a malformed row fails to compile
+ * here. Iterating this view rather than CANON directly also makes `row[2]`
+ * legal whatever a given row's arity, which lets the derivation below read the
+ * flag's value instead of the row's length. Reading length would silently mark
+ * every book single-chapter the moment a fourth field is added to a row.
+ */
+const CANON_ROWS: readonly BookRow[] = CANON;
 
 // ---------------------------------------------------------------------------
 // Compile-time guards on CANON
@@ -361,23 +380,29 @@ type IsExactly<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends
  */
 type _CanonRowCount = Assert<IsExactly<(typeof CANON)["length"], 66>>;
 
-/** Every row is [name, prefix] or [name, prefix, SINGLE_CHAPTER]. */
-type _CanonRowShape = Assert<typeof CANON extends readonly BookRow[] ? true : false>;
-
 /**
- * Sentinel positions, since canon numbers are derived from row order. These
- * pin the first and last book and both sides of the OT/NT boundary, so a
- * wholesale reordering (alphabetising the list) or an inserted or deleted row
- * fails the build rather than silently renumbering books.
+ * Sentinel positions, since canon numbers are derived from row order. Anchoring
+ * roughly every eighth row means a wholesale reordering, an alphabetised list,
+ * or an inserted or deleted row fails the build rather than silently renumbering
+ * books.
  *
- * Deliberately partial: a local swap of two adjacent books is NOT caught, and
- * cannot be without restating the whole canon order as a second table, which
- * would reintroduce exactly the drift this table exists to prevent.
+ * What this does NOT catch, stated precisely: any permutation of CANON that
+ * leaves every anchored position intact, no matter how far apart the swapped
+ * rows are. Closing that completely would mean anchoring all 66 positions, which
+ * is the second table this design exists to remove. The anchors below are the
+ * compromise, and they are safe to pin because the Protestant canon is fixed.
  */
-type _CanonStartsAtGenesis = Assert<IsExactly<(typeof CANON)[0][0], "Genesis">>;
-type _CanonOldTestamentEnds = Assert<IsExactly<(typeof CANON)[38][0], "Malachi">>;
-type _CanonNewTestamentStarts = Assert<IsExactly<(typeof CANON)[39][0], "Matthew">>;
-type _CanonEndsAtRevelation = Assert<IsExactly<(typeof CANON)[65][0], "Revelation">>;
+type _CanonAt0 = Assert<IsExactly<(typeof CANON)[0][0], "Genesis">>;
+type _CanonAt8 = Assert<IsExactly<(typeof CANON)[8][0], "1 Samuel">>;
+type _CanonAt16 = Assert<IsExactly<(typeof CANON)[16][0], "Esther">>;
+type _CanonAt24 = Assert<IsExactly<(typeof CANON)[24][0], "Lamentations">>;
+type _CanonAt32 = Assert<IsExactly<(typeof CANON)[32][0], "Micah">>;
+/** Both sides of the OT/NT boundary. */
+type _CanonAt38 = Assert<IsExactly<(typeof CANON)[38][0], "Malachi">>;
+type _CanonAt39 = Assert<IsExactly<(typeof CANON)[39][0], "Matthew">>;
+type _CanonAt47 = Assert<IsExactly<(typeof CANON)[47][0], "Galatians">>;
+type _CanonAt55 = Assert<IsExactly<(typeof CANON)[55][0], "Titus">>;
+type _CanonAt65 = Assert<IsExactly<(typeof CANON)[65][0], "Revelation">>;
 
 /** Everything the path builder needs to know about one book. */
 interface BookMeta {
@@ -398,11 +423,11 @@ interface BookMeta {
  * `Record` would claim every lookup succeeds.)
  */
 const BOOKS = new Map<string, BookMeta>();
-CANON.forEach((row, index) => {
+CANON_ROWS.forEach((row, index) => {
 	BOOKS.set(row[0], {
 		prefix: row[1],
 		num: String(index + 1).padStart(2, "0"),
-		singleChapter: row.length > 2,
+		singleChapter: row[2] === SINGLE_CHAPTER,
 	});
 });
 

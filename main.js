@@ -663,6 +663,8 @@ var BOOK_MAP = {
 function normaliseBook(raw) {
   var _a;
   const key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key))
+    return null;
   return (_a = BOOK_MAP[key]) != null ? _a : null;
 }
 var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?/g;
@@ -761,12 +763,13 @@ var CANON = [
   ["Jude", "Jude", SINGLE_CHAPTER],
   ["Revelation", "Rev"]
 ];
+var CANON_ROWS = CANON;
 var BOOKS = /* @__PURE__ */ new Map();
-CANON.forEach((row, index) => {
+CANON_ROWS.forEach((row, index) => {
   BOOKS.set(row[0], {
     prefix: row[1],
     num: String(index + 1).padStart(2, "0"),
-    singleChapter: row.length > 2
+    singleChapter: row[2] === SINGLE_CHAPTER
   });
 });
 function chapterPaths(csbFolder, book, chapter) {
