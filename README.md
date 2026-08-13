@@ -94,6 +94,7 @@ _Coming after iPad testing._
 
 - Reference-parsing approach ported from [obsidian-bible-linker](https://github.com/kuchejak/obsidian-bible-linker) by Jakub Kuchejda (MIT).
 - Mobile-compatible plugin patterns informed by [obsidian-bible-reference](https://github.com/tim-hub/obsidian-bible-reference) by tim-hub (MIT).
+- Numbered canon-order vault support contributed by [@cansas](https://github.com/cansas) ([#2](https://github.com/overmoro/preach-md/pull/2)).
 
 ---
 
