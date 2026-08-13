@@ -9,52 +9,19 @@
 import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 
 // ---------------------------------------------------------------------------
-// Book canon number (for numbered vault folder names like "40 - Matthew")
-// ---------------------------------------------------------------------------
-
-/**
- * Maps canonical book names to their standard Protestant canon order number.
- * Used to resolve folder names like "40 - Matthew" instead of plain "Matthew".
- */
-const BOOK_NUMBERS: Record<string, string> = {
-	"Genesis": "01", "Exodus": "02", "Leviticus": "03",
-	"Numbers": "04", "Deuteronomy": "05", "Joshua": "06",
-	"Judges": "07", "Ruth": "08", "1 Samuel": "09",
-	"2 Samuel": "10", "1 Kings": "11", "2 Kings": "12",
-	"1 Chronicles": "13", "2 Chronicles": "14", "Ezra": "15",
-	"Nehemiah": "16", "Esther": "17", "Job": "18",
-	"Psalms": "19", "Proverbs": "20", "Ecclesiastes": "21",
-	"Song of Solomon": "22", "Isaiah": "23", "Jeremiah": "24",
-	"Lamentations": "25", "Ezekiel": "26", "Daniel": "27",
-	"Hosea": "28", "Joel": "29", "Amos": "30",
-	"Obadiah": "31", "Jonah": "32", "Micah": "33",
-	"Nahum": "34", "Habakkuk": "35", "Zephaniah": "36",
-	"Haggai": "37", "Zechariah": "38", "Malachi": "39",
-	"Matthew": "40", "Mark": "41", "Luke": "42",
-	"John": "43", "Acts": "44", "Romans": "45",
-	"1 Corinthians": "46", "2 Corinthians": "47", "Galatians": "48",
-	"Ephesians": "49", "Philippians": "50", "Colossians": "51",
-	"1 Thessalonians": "52", "2 Thessalonians": "53", "1 Timothy": "54",
-	"2 Timothy": "55", "Titus": "56", "Philemon": "57",
-	"Hebrews": "58", "James": "59", "1 Peter": "60",
-	"2 Peter": "61", "1 John": "62", "2 John": "63",
-	"3 John": "64", "Jude": "65", "Revelation": "66",
-};
-
-/** Books that have only one chapter (filename is just "{prefix}.md" with no chapter number). */
-const SINGLE_CHAPTER_BOOKS = new Set([
-	"Obadiah", "Philemon", "2 John", "3 John", "Jude",
-]);
-
-// ---------------------------------------------------------------------------
 // Book name normalisation
 // ---------------------------------------------------------------------------
 
 /**
  * Maps every recognised book name / abbreviation (lower-cased) to the
  * canonical folder name used in the CSB vault.
+ *
+ * Values are BookName, not string, so every alias must resolve to a book that
+ * actually has a CANON row. Without that tie, an alias could normalise to a
+ * name CANON does not carry, and every reference to that book would silently
+ * stop resolving on both vault conventions.
  */
-const BOOK_MAP: Record<string, string> = {
+const BOOK_MAP: Record<string, BookName> = {
 	// Genesis
 	genesis: "Genesis", gen: "Genesis", ge: "Genesis", gn: "Genesis",
 	// Exodus
@@ -270,78 +237,174 @@ export function parseReferences(text: string): (ScriptureRef & { index: number; 
  */
 const verseCache = new Map<string, Map<number, string>>();
 
+/** Marks a book that has only one chapter. See CANON. */
+const SINGLE_CHAPTER = true;
+
 /**
- * Maps each canonical book name to the filename prefix used inside its
- * CSB vault folder. The chapter file is "{prefix} {chapter}.md".
+ * Every book of the Protestant canon, in canonical order, paired with the
+ * filename prefix used inside its vault folder.
+ *
+ * Order is load-bearing. A book's canon number, used for numbered vault
+ * folders like "40 - Matthew", is derived from its position in this list, so a
+ * book cannot carry a filename prefix without also carrying a canon number,
+ * and the two cannot drift apart. Reorder rows only if the canon itself
+ * changes.
+ *
+ * The optional third field marks single-chapter books, whose filename in a
+ * numbered vault is "{prefix}.md" rather than "{prefix}-01.md".
  */
-const CHAPTER_PREFIX: Record<string, string> = {
-	"Genesis": "Gen",
-	"Exodus": "Exod",
-	"Leviticus": "Lev",
-	"Numbers": "Num",
-	"Deuteronomy": "Deut",
-	"Joshua": "Josh",
-	"Judges": "Judg",
-	"Ruth": "Ruth",
-	"1 Samuel": "1 Sam",
-	"2 Samuel": "2 Sam",
-	"1 Kings": "1 Kgs",
-	"2 Kings": "2 Kgs",
-	"1 Chronicles": "1 Chr",
-	"2 Chronicles": "2 Chr",
-	"Ezra": "Ezr",
-	"Nehemiah": "Neh",
-	"Esther": "Esth",
-	"Job": "Job",
-	"Psalms": "Ps",
-	"Proverbs": "Prov",
-	"Ecclesiastes": "Eccl",
-	"Song of Solomon": "Song",
-	"Isaiah": "Isa",
-	"Jeremiah": "Jer",
-	"Lamentations": "Lam",
-	"Ezekiel": "Ezek",
-	"Daniel": "Dan",
-	"Hosea": "Hos",
-	"Joel": "Joel",
-	"Amos": "Amos",
-	"Obadiah": "Obad",
-	"Jonah": "Jonah",
-	"Micah": "Mic",
-	"Nahum": "Nah",
-	"Habakkuk": "Hab",
-	"Zephaniah": "Zeph",
-	"Haggai": "Hag",
-	"Zechariah": "Zech",
-	"Malachi": "Mal",
-	"Matthew": "Matt",
-	"Mark": "Mark",
-	"Luke": "Luke",
-	"John": "John",
-	"Acts": "Acts",
-	"Romans": "Rom",
-	"1 Corinthians": "1 Cor",
-	"2 Corinthians": "2 Cor",
-	"Galatians": "Gal",
-	"Ephesians": "Eph",
-	"Philippians": "Phil",
-	"Colossians": "Col",
-	"1 Thessalonians": "1 Thess",
-	"2 Thessalonians": "2 Thess",
-	"1 Timothy": "1 Tim",
-	"2 Timothy": "2 Tim",
-	"Titus": "Titus",
-	"Philemon": "Phlm",
-	"Hebrews": "Heb",
-	"James": "Jas",
-	"1 Peter": "1 Pet",
-	"2 Peter": "2 Pet",
-	"1 John": "1 John",
-	"2 John": "2 John",
-	"3 John": "3 John",
-	"Jude": "Jude",
-	"Revelation": "Rev",
-};
+const CANON = [
+	["Genesis", "Gen"],
+	["Exodus", "Exod"],
+	["Leviticus", "Lev"],
+	["Numbers", "Num"],
+	["Deuteronomy", "Deut"],
+	["Joshua", "Josh"],
+	["Judges", "Judg"],
+	["Ruth", "Ruth"],
+	["1 Samuel", "1 Sam"],
+	["2 Samuel", "2 Sam"],
+	["1 Kings", "1 Kgs"],
+	["2 Kings", "2 Kgs"],
+	["1 Chronicles", "1 Chr"],
+	["2 Chronicles", "2 Chr"],
+	["Ezra", "Ezr"],
+	["Nehemiah", "Neh"],
+	["Esther", "Esth"],
+	["Job", "Job"],
+	["Psalms", "Ps"],
+	["Proverbs", "Prov"],
+	["Ecclesiastes", "Eccl"],
+	["Song of Solomon", "Song"],
+	["Isaiah", "Isa"],
+	["Jeremiah", "Jer"],
+	["Lamentations", "Lam"],
+	["Ezekiel", "Ezek"],
+	["Daniel", "Dan"],
+	["Hosea", "Hos"],
+	["Joel", "Joel"],
+	["Amos", "Amos"],
+	["Obadiah", "Obad", SINGLE_CHAPTER],
+	["Jonah", "Jonah"],
+	["Micah", "Mic"],
+	["Nahum", "Nah"],
+	["Habakkuk", "Hab"],
+	["Zephaniah", "Zeph"],
+	["Haggai", "Hag"],
+	["Zechariah", "Zech"],
+	["Malachi", "Mal"],
+	["Matthew", "Matt"],
+	["Mark", "Mark"],
+	["Luke", "Luke"],
+	["John", "John"],
+	["Acts", "Acts"],
+	["Romans", "Rom"],
+	["1 Corinthians", "1 Cor"],
+	["2 Corinthians", "2 Cor"],
+	["Galatians", "Gal"],
+	["Ephesians", "Eph"],
+	["Philippians", "Phil"],
+	["Colossians", "Col"],
+	["1 Thessalonians", "1 Thess"],
+	["2 Thessalonians", "2 Thess"],
+	["1 Timothy", "1 Tim"],
+	["2 Timothy", "2 Tim"],
+	["Titus", "Titus"],
+	["Philemon", "Phlm", SINGLE_CHAPTER],
+	["Hebrews", "Heb"],
+	["James", "Jas"],
+	["1 Peter", "1 Pet"],
+	["2 Peter", "2 Pet"],
+	["1 John", "1 John"],
+	["2 John", "2 John", SINGLE_CHAPTER],
+	["3 John", "3 John", SINGLE_CHAPTER],
+	["Jude", "Jude", SINGLE_CHAPTER],
+	["Revelation", "Rev"],
+] as const;
+
+/**
+ * A canonical book name, derived from CANON so the two cannot drift apart.
+ * BOOK_MAP is typed to emit these, so renaming a CANON row without updating
+ * every alias that resolves to it is a compile error.
+ */
+type BookName = (typeof CANON)[number][0];
+
+/**
+ * A well-formed canon row: [name, prefix], or [name, prefix, SINGLE_CHAPTER].
+ *
+ * The third field is typed as SINGLE_CHAPTER itself rather than as a boolean,
+ * because the derivation below reads whether the field is present and not what
+ * it holds. Writing `false` there to document "multi-chapter" would otherwise
+ * mark the book single-chapter; this makes it a compile error instead.
+ */
+type BookRow =
+	| readonly [string, string]
+	| readonly [string, string, typeof SINGLE_CHAPTER];
+
+// ---------------------------------------------------------------------------
+// Compile-time guards on CANON
+//
+// These are types, so they emit no runtime code and cannot be pruned or
+// flagged as unused variables. Each yields `false` when its invariant breaks,
+// and `Assert` rejects anything but `true`. Note that a guard resolving to
+// `never` would pass silently, since `never` satisfies every constraint.
+// ---------------------------------------------------------------------------
+
+type Assert<T extends true> = T;
+type IsExactly<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+	? true
+	: false;
+
+/**
+ * The Protestant canon has exactly 66 books. Losing or duplicating a row fails
+ * the build instead of silently shifting every canon number after it.
+ */
+type _CanonRowCount = Assert<IsExactly<(typeof CANON)["length"], 66>>;
+
+/** Every row is [name, prefix] or [name, prefix, SINGLE_CHAPTER]. */
+type _CanonRowShape = Assert<typeof CANON extends readonly BookRow[] ? true : false>;
+
+/**
+ * Sentinel positions, since canon numbers are derived from row order. These
+ * pin the first and last book and both sides of the OT/NT boundary, so a
+ * wholesale reordering (alphabetising the list) or an inserted or deleted row
+ * fails the build rather than silently renumbering books.
+ *
+ * Deliberately partial: a local swap of two adjacent books is NOT caught, and
+ * cannot be without restating the whole canon order as a second table, which
+ * would reintroduce exactly the drift this table exists to prevent.
+ */
+type _CanonStartsAtGenesis = Assert<IsExactly<(typeof CANON)[0][0], "Genesis">>;
+type _CanonOldTestamentEnds = Assert<IsExactly<(typeof CANON)[38][0], "Malachi">>;
+type _CanonNewTestamentStarts = Assert<IsExactly<(typeof CANON)[39][0], "Matthew">>;
+type _CanonEndsAtRevelation = Assert<IsExactly<(typeof CANON)[65][0], "Revelation">>;
+
+/** Everything the path builder needs to know about one book. */
+interface BookMeta {
+	/** Filename prefix inside the book folder, e.g. "Matt" for Matthew. */
+	prefix: string;
+	/** Zero-padded canon order number, e.g. "40", for "40 - Matthew" folders. */
+	num: string;
+	/** True when the book has a single chapter. */
+	singleChapter: boolean;
+}
+
+/**
+ * Canonical book name to its metadata, derived from CANON.
+ *
+ * A Map rather than a plain object so that a miss types as `undefined`, which
+ * makes the guard in chapterPaths() compiler-enforced instead of merely
+ * correct. (`tsconfig` has no `noUncheckedIndexedAccess`, so indexing a
+ * `Record` would claim every lookup succeeds.)
+ */
+const BOOKS = new Map<string, BookMeta>();
+CANON.forEach((row, index) => {
+	BOOKS.set(row[0], {
+		prefix: row[1],
+		num: String(index + 1).padStart(2, "0"),
+		singleChapter: row.length > 2,
+	});
+});
 
 /**
  * Build candidate vault paths to a chapter file, in priority order.
@@ -361,15 +424,15 @@ const CHAPTER_PREFIX: Record<string, string> = {
  * use "{prefix}.md" instead of "{prefix}-01.md" in numbered folders.
  */
 function chapterPaths(csbFolder: string, book: string, chapter: number): string[] {
-	const prefix = CHAPTER_PREFIX[book] ?? book;
-	const num = BOOK_NUMBERS[book];
+	const meta = BOOKS.get(book);
+	const prefix = meta?.prefix ?? book;
 	const candidates: string[] = [];
 
-	if (num !== undefined) {
+	if (meta !== undefined) {
 		// Numbered folder: "40 - Matthew"
-		const folder = `${num} - ${book}`;
+		const folder = `${meta.num} - ${book}`;
 
-		if (SINGLE_CHAPTER_BOOKS.has(book)) {
+		if (meta.singleChapter) {
 			candidates.push(`${csbFolder}/${folder}/${prefix}.md`);
 		} else {
 			candidates.push(`${csbFolder}/${folder}/${prefix}-${String(chapter).padStart(2, "0")}.md`);
