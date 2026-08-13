@@ -107,7 +107,7 @@ export class PreachMDSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Bible folder path")
 			.setDesc(
-				"Vault path to your bible chapter files. Each book is a subfolder; each chapter is a separate .md file."
+				"Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. \"Matthew\") or numbered canon-order (e.g. \"40 - Matthew\"); each chapter is a separate .md file."
 			)
 			.addText((text) =>
 				text
