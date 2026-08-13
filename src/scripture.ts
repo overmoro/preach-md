@@ -672,7 +672,7 @@ export class ScriptureExpander {
 				}
 
 				// Tappable span
-				const span = document.createElement("span");
+				const span = createSpan();
 				span.className = "preach-scripture-ref";
 				span.textContent = ref.raw;
 				span.dataset.ref = JSON.stringify({
@@ -727,7 +727,7 @@ export class ScriptureExpander {
 		this.expanded.clear();
 
 		// Insert loading indicator
-		const expandEl = document.createElement("span");
+		const expandEl = createSpan();
 		expandEl.className = "preach-scripture-expand";
 		expandEl.textContent = "Loading...";
 		span.insertAdjacentElement("afterend", expandEl);
@@ -749,7 +749,7 @@ export class ScriptureExpander {
 
 				// Render verse text into a temp container, then lift child nodes inline.
 				// MarkdownRenderer wraps plain text in <p>; unwrap to keep flow continuous.
-				const tmp = document.createElement("div");
+				const tmp = createDiv();
 				await MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
 
 				const nodes = Array.from(tmp.childNodes);

@@ -69,7 +69,7 @@ export class FormatManager {
 		// Bail if selection is inside a scripture expansion
 		let node: Node | null = sel.anchorNode;
 		while (node) {
-			if (node instanceof HTMLElement) {
+			if (node.instanceOf(HTMLElement)) {
 				if (node.classList.contains("preach-scripture-expand")) {
 					this.showFormatFailNotice("scripture-expand");
 					return null;
@@ -82,7 +82,7 @@ export class FormatManager {
 		let blockEl: HTMLElement | null = null;
 		node = sel.anchorNode;
 		while (node) {
-			if (node instanceof HTMLElement && node.classList.contains("preach-block")) {
+			if (node.instanceOf(HTMLElement) && node.classList.contains("preach-block")) {
 				blockEl = node;
 				break;
 			}
@@ -95,7 +95,7 @@ export class FormatManager {
 		let focusBlockEl: HTMLElement | null = null;
 		let fn: Node | null = sel.focusNode;
 		while (fn) {
-			if (fn instanceof HTMLElement && fn.classList.contains("preach-block")) {
+			if (fn.instanceOf(HTMLElement) && fn.classList.contains("preach-block")) {
 				focusBlockEl = fn;
 				break;
 			}
@@ -170,7 +170,7 @@ export class FormatManager {
 		let node: Node | null = sel.anchorNode;
 		let blockEl: HTMLElement | null = null;
 		while (node) {
-			if (node instanceof HTMLElement) {
+			if (node.instanceOf(HTMLElement)) {
 				if (node.classList.contains("preach-scripture-expand")) return false;
 				if (node.classList.contains("preach-block")) {
 					blockEl = node;
@@ -187,7 +187,7 @@ export class FormatManager {
 		let focusBlockEl: HTMLElement | null = null;
 		let fn: Node | null = focusNode;
 		while (fn) {
-			if (fn instanceof HTMLElement && fn.classList.contains("preach-block")) {
+			if (fn.instanceOf(HTMLElement) && fn.classList.contains("preach-block")) {
 				focusBlockEl = fn;
 				break;
 			}
@@ -257,11 +257,9 @@ export class FormatManager {
 
 	/** Show a brief notice near the selection area that formatting failed. */
 	showFormatFailNotice(reason: string): void {
-		console.log("preach-md format-fail:", reason);
-
 		// Ensure a single notice element exists
 		if (!this.noticeEl) {
-			this.noticeEl = document.createElement("div");
+			this.noticeEl = createDiv();
 			this.noticeEl.className = "preach-format-fail-notice";
 			this.noticeEl.textContent = "Can't format here. Use the edit button for changes.";
 			this.noticeEl.addEventListener("pointerdown", () => this.hideFormatFailNotice());
@@ -281,9 +279,8 @@ export class FormatManager {
 
 	/** Position and show notice near a specific rect. */
 	showFormatFailNoticeAt(rect: DOMRect): void {
-		console.log("preach-md format-fail near selection");
 		if (!this.noticeEl) {
-			this.noticeEl = document.createElement("div");
+			this.noticeEl = createDiv();
 			this.noticeEl.className = "preach-format-fail-notice";
 			this.noticeEl.textContent = "Can't format here. Use the edit button for changes.";
 			this.noticeEl.addEventListener("pointerdown", () => this.hideFormatFailNotice());
@@ -312,9 +309,7 @@ export class FormatManager {
 		const vpW = window.innerWidth;
 
 		// Temporarily show off-screen to measure width
-		this.noticeEl.style.visibility = "hidden";
-		this.noticeEl.style.top = "-9999px";
-		this.noticeEl.style.left = "-9999px";
+		this.noticeEl.setCssStyles({ visibility: "hidden", top: "-9999px", left: "-9999px" });
 
 		const noticeW = this.noticeEl.offsetWidth || 260;
 		const midX = rect.left + rect.width / 2;
@@ -328,9 +323,7 @@ export class FormatManager {
 			top = rect.bottom + MARGIN;
 		}
 
-		this.noticeEl.style.left = `${left}px`;
-		this.noticeEl.style.top = `${top}px`;
-		this.noticeEl.style.visibility = "";
+		this.noticeEl.setCssStyles({ left: `${left}px`, top: `${top}px`, visibility: "" });
 	}
 
 	/** Clean up any notice elements (call on view close). */
@@ -408,14 +401,14 @@ export class PreachFormatToolbar {
 		// if the finger drifts off-screen.
 		const body = this.bodyElGetter();
 		const touchTarget = body?.closest(".preach-content") ?? document;
-		touchTarget.addEventListener("touchstart", this.touchStartHandler, { passive: true } as AddEventListenerOptions);
+		touchTarget.addEventListener("touchstart", this.touchStartHandler, { passive: true });
 		document.addEventListener("touchend", this.touchEndHandler, { passive: true });
 		document.addEventListener("touchcancel", this.touchEndHandler, { passive: true });
 		document.addEventListener("selectionchange", this.selectionChangeHandler);
 	}
 
 	private buildToolbar(): HTMLElement {
-		const bar = document.createElement("div");
+		const bar = createDiv();
 		bar.className = "preach-inline-format-bar";
 		bar.setAttribute("aria-label", "Format selection");
 
@@ -425,17 +418,13 @@ export class PreachFormatToolbar {
 			wrapper: FormatWrapper,
 			extraClass?: string
 		): void => {
-			const btn = document.createElement("button");
+			const btn = createEl("button");
 			btn.className = "preach-inline-fmt-btn" + (extraClass ? " " + extraClass : "");
 			btn.setAttribute("aria-label", title);
 			btn.setAttribute("title", title);
-			// Prevent text selection on toolbar buttons
-			btn.style.userSelect = "none";
-			(btn.style as CSSStyleDeclaration & { webkitUserSelect: string }).webkitUserSelect = "none";
-
 			if (label === "H") {
 				// Highlight icon: small coloured square
-				btn.innerHTML = '<span style="display:inline-block;width:13px;height:13px;background:#ffd24a;border-radius:2px;vertical-align:middle;"></span>';
+				btn.createSpan({ cls: "preach-fmt-swatch" });
 			} else {
 				btn.textContent = label;
 			}
@@ -537,8 +526,7 @@ export class PreachFormatToolbar {
 				: 8;
 		}
 
-		this.toolbarEl.style.left = `${left}px`;
-		this.toolbarEl.style.top = `${top}px`;
+		this.toolbarEl.setCssStyles({ left: `${left}px`, top: `${top}px` });
 	}
 
 	private show(): void {

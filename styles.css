@@ -741,6 +741,31 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 	background: rgba(255, 255, 255, 0.22);
 }
 
+/*
+ * Highlight swatch icon inside a format button. Previously built by assigning
+ * innerHTML with an inline style attribute, which wrote to the DOM directly and
+ * hard-coded the colour away from the variable above.
+ */
+.preach-fmt-swatch {
+	display: inline-block;
+	width: 14px;
+	height: 14px;
+	/*
+	 * The fallback is load-bearing, not decoration. The custom property is
+	 * declared on .preach-md-root, and the format toolbars are attached to
+	 * document.body, outside that scope. Without it the swatch resolves to
+	 * transparent and the highlight button renders as an empty square.
+	 */
+	background: var(--preach-highlight-btn-on-bg, #ffd24a);
+	border-radius: 2px;
+	vertical-align: middle;
+}
+
+.preach-inline-fmt-btn .preach-fmt-swatch {
+	width: 13px;
+	height: 13px;
+}
+
 .preach-inline-fmt-btn--bold {
 	font-weight: 700;
 }

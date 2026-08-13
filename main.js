@@ -906,7 +906,7 @@ var ScriptureExpander = class {
         if (ref.index > cursor) {
           frag.appendChild(document.createTextNode(text.slice(cursor, ref.index)));
         }
-        const span = document.createElement("span");
+        const span = createSpan();
         span.className = "preach-scripture-ref";
         span.textContent = ref.raw;
         span.dataset.ref = JSON.stringify({
@@ -948,7 +948,7 @@ var ScriptureExpander = class {
       s.classList.remove("preach-scripture-ref--open");
     });
     this.expanded.clear();
-    const expandEl = document.createElement("span");
+    const expandEl = createSpan();
     expandEl.className = "preach-scripture-expand";
     expandEl.textContent = "Loading...";
     span.insertAdjacentElement("afterend", expandEl);
@@ -961,7 +961,7 @@ var ScriptureExpander = class {
       const passageEl = expandEl.createEl("span", { cls: "preach-scripture-passage" });
       for (const { verse, text } of verses) {
         passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: String(verse) });
-        const tmp = document.createElement("div");
+        const tmp = createDiv();
         await import_obsidian.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
         const nodes = Array.from(tmp.childNodes);
         for (const node of nodes) {
@@ -1046,7 +1046,7 @@ var FormatManager = class {
       return null;
     let node = sel.anchorNode;
     while (node) {
-      if (node instanceof HTMLElement) {
+      if (node.instanceOf(HTMLElement)) {
         if (node.classList.contains("preach-scripture-expand")) {
           this.showFormatFailNotice("scripture-expand");
           return null;
@@ -1057,7 +1057,7 @@ var FormatManager = class {
     let blockEl = null;
     node = sel.anchorNode;
     while (node) {
-      if (node instanceof HTMLElement && node.classList.contains("preach-block")) {
+      if (node.instanceOf(HTMLElement) && node.classList.contains("preach-block")) {
         blockEl = node;
         break;
       }
@@ -1068,7 +1068,7 @@ var FormatManager = class {
     let focusBlockEl = null;
     let fn = sel.focusNode;
     while (fn) {
-      if (fn instanceof HTMLElement && fn.classList.contains("preach-block")) {
+      if (fn.instanceOf(HTMLElement) && fn.classList.contains("preach-block")) {
         focusBlockEl = fn;
         break;
       }
@@ -1132,7 +1132,7 @@ var FormatManager = class {
     let node = sel.anchorNode;
     let blockEl = null;
     while (node) {
-      if (node instanceof HTMLElement) {
+      if (node.instanceOf(HTMLElement)) {
         if (node.classList.contains("preach-scripture-expand"))
           return false;
         if (node.classList.contains("preach-block")) {
@@ -1148,7 +1148,7 @@ var FormatManager = class {
     let focusBlockEl = null;
     let fn = focusNode;
     while (fn) {
-      if (fn instanceof HTMLElement && fn.classList.contains("preach-block")) {
+      if (fn.instanceOf(HTMLElement) && fn.classList.contains("preach-block")) {
         focusBlockEl = fn;
         break;
       }
@@ -1204,9 +1204,8 @@ var FormatManager = class {
   }
   /** Show a brief notice near the selection area that formatting failed. */
   showFormatFailNotice(reason) {
-    console.log("preach-md format-fail:", reason);
     if (!this.noticeEl) {
-      this.noticeEl = document.createElement("div");
+      this.noticeEl = createDiv();
       this.noticeEl.className = "preach-format-fail-notice";
       this.noticeEl.textContent = "Can't format here. Use the edit button for changes.";
       this.noticeEl.addEventListener("pointerdown", () => this.hideFormatFailNotice());
@@ -1221,9 +1220,8 @@ var FormatManager = class {
   }
   /** Position and show notice near a specific rect. */
   showFormatFailNoticeAt(rect) {
-    console.log("preach-md format-fail near selection");
     if (!this.noticeEl) {
-      this.noticeEl = document.createElement("div");
+      this.noticeEl = createDiv();
       this.noticeEl.className = "preach-format-fail-notice";
       this.noticeEl.textContent = "Can't format here. Use the edit button for changes.";
       this.noticeEl.addEventListener("pointerdown", () => this.hideFormatFailNotice());
@@ -1250,9 +1248,7 @@ var FormatManager = class {
     const TOOLBAR_H = 36;
     const MARGIN = 8;
     const vpW = window.innerWidth;
-    this.noticeEl.style.visibility = "hidden";
-    this.noticeEl.style.top = "-9999px";
-    this.noticeEl.style.left = "-9999px";
+    this.noticeEl.setCssStyles({ visibility: "hidden", top: "-9999px", left: "-9999px" });
     const noticeW = this.noticeEl.offsetWidth || 260;
     const midX = rect.left + rect.width / 2;
     let left = midX - noticeW / 2;
@@ -1263,9 +1259,7 @@ var FormatManager = class {
     } else {
       top = rect.bottom + MARGIN;
     }
-    this.noticeEl.style.left = `${left}px`;
-    this.noticeEl.style.top = `${top}px`;
-    this.noticeEl.style.visibility = "";
+    this.noticeEl.setCssStyles({ left: `${left}px`, top: `${top}px`, visibility: "" });
   }
   /** Clean up any notice elements (call on view close). */
   destroy() {
@@ -1319,18 +1313,16 @@ var PreachFormatToolbar = class {
     document.addEventListener("selectionchange", this.selectionChangeHandler);
   }
   buildToolbar() {
-    const bar = document.createElement("div");
+    const bar = createDiv();
     bar.className = "preach-inline-format-bar";
     bar.setAttribute("aria-label", "Format selection");
     const makeBtn = (label, title, wrapper, extraClass) => {
-      const btn = document.createElement("button");
+      const btn = createEl("button");
       btn.className = "preach-inline-fmt-btn" + (extraClass ? " " + extraClass : "");
       btn.setAttribute("aria-label", title);
       btn.setAttribute("title", title);
-      btn.style.userSelect = "none";
-      btn.style.webkitUserSelect = "none";
       if (label === "H") {
-        btn.innerHTML = '<span style="display:inline-block;width:13px;height:13px;background:#ffd24a;border-radius:2px;vertical-align:middle;"></span>';
+        btn.createSpan({ cls: "preach-fmt-swatch" });
       } else {
         btn.textContent = label;
       }
@@ -1403,8 +1395,7 @@ var PreachFormatToolbar = class {
     } else {
       top = spaceBelow > spaceAbove ? vpH - toolbarH - 8 : 8;
     }
-    this.toolbarEl.style.left = `${left}px`;
-    this.toolbarEl.style.top = `${top}px`;
+    this.toolbarEl.setCssStyles({ left: `${left}px`, top: `${top}px` });
   }
   show() {
     if (!this.visible) {
@@ -1841,12 +1832,12 @@ var PreachView = class extends import_obsidian2.ItemView {
     if (existingLeaf) {
       this.app.workspace.setActiveLeaf(existingLeaf, { focus: true });
       if (startLine !== null) {
-        setTimeout(() => {
+        window.setTimeout(() => {
           var _a, _b;
           (_b = (_a = existingLeaf.view).setEphemeralState) == null ? void 0 : _b.call(_a, { line: startLine });
         }, 0);
       }
-      setTimeout(() => this.maybeInjectEditUI(existingLeaf), 0);
+      window.setTimeout(() => this.maybeInjectEditUI(existingLeaf), 0);
     } else {
       const leaf = this.app.workspace.getLeaf("tab");
       if (this.file) {
@@ -1854,7 +1845,7 @@ var PreachView = class extends import_obsidian2.ItemView {
         if (startLine !== null)
           eState.line = startLine;
         void leaf.openFile(this.file, { active: true, eState });
-        setTimeout(() => this.maybeInjectEditUI(leaf), 0);
+        window.setTimeout(() => this.maybeInjectEditUI(leaf), 0);
       }
     }
   }
@@ -1867,7 +1858,7 @@ var PreachView = class extends import_obsidian2.ItemView {
       return;
     const host = leaf.view.containerEl;
     if (!this.editPills.has(leaf)) {
-      const pill = document.createElement("button");
+      const pill = createEl("button");
       pill.className = "preach-back-pill";
       pill.textContent = "\u2190 Preach";
       pill.setAttribute("aria-label", "Back to preach mode");
@@ -1882,7 +1873,7 @@ var PreachView = class extends import_obsidian2.ItemView {
       this.editPills.set(leaf, pill);
     }
     if (!this.editFormatBars.has(leaf)) {
-      setTimeout(() => {
+      window.setTimeout(() => {
         const toolbar = this.buildEditorFormatBar(leaf);
         if (toolbar) {
           host.appendChild(toolbar);
@@ -1896,15 +1887,15 @@ var PreachView = class extends import_obsidian2.ItemView {
     const mdView = leaf.view;
     if (!mdView || typeof mdView.editor === "undefined")
       return null;
-    const toolbar = document.createElement("div");
+    const toolbar = createDiv();
     toolbar.className = "preach-editor-format-bar";
     const makeBtn = (label, title, open, close, extraClass) => {
-      const btn = document.createElement("button");
+      const btn = createEl("button");
       btn.className = "preach-fmt-btn" + (extraClass ? " " + extraClass : "");
       btn.setAttribute("aria-label", title);
       btn.setAttribute("title", title);
       if (label === "highlight") {
-        btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;background:#ffd24a;border-radius:2px;vertical-align:middle;"></span>';
+        btn.createSpan({ cls: "preach-fmt-swatch" });
       } else {
         btn.textContent = label;
       }

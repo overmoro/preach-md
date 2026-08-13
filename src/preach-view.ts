@@ -563,19 +563,19 @@ export class PreachView extends ItemView {
 		if (existingLeaf) {
 			this.app.workspace.setActiveLeaf(existingLeaf, { focus: true });
 			if (startLine !== null) {
-				setTimeout(() => {
+				window.setTimeout(() => {
 					(existingLeaf.view as { setEphemeralState?: (s: object) => void })
 						.setEphemeralState?.({ line: startLine });
 				}, 0);
 			}
-			setTimeout(() => this.maybeInjectEditUI(existingLeaf), 0);
+			window.setTimeout(() => this.maybeInjectEditUI(existingLeaf), 0);
 		} else {
 			const leaf = this.app.workspace.getLeaf("tab");
 			if (this.file) {
 				const eState: Record<string, unknown> = { mode: "source" };
 				if (startLine !== null) eState.line = startLine;
 				void leaf.openFile(this.file, { active: true, eState });
-				setTimeout(() => this.maybeInjectEditUI(leaf), 0);
+				window.setTimeout(() => this.maybeInjectEditUI(leaf), 0);
 			}
 		}
 	}
@@ -591,7 +591,7 @@ export class PreachView extends ItemView {
 
 		// Back-pill (if not already present)
 		if (!this.editPills.has(leaf)) {
-			const pill = document.createElement("button");
+			const pill = createEl("button");
 			pill.className = "preach-back-pill";
 			pill.textContent = "← Preach";
 			pill.setAttribute("aria-label", "Back to preach mode");
@@ -610,7 +610,7 @@ export class PreachView extends ItemView {
 
 		// Format toolbar (if not already present)
 		if (!this.editFormatBars.has(leaf)) {
-			setTimeout(() => {
+			window.setTimeout(() => {
 				const toolbar = this.buildEditorFormatBar(leaf);
 				if (toolbar) {
 					host.appendChild(toolbar);
@@ -625,18 +625,18 @@ export class PreachView extends ItemView {
 		const mdView = leaf.view as MarkdownView;
 		if (!mdView || typeof mdView.editor === "undefined") return null;
 
-		const toolbar = document.createElement("div");
+		const toolbar = createDiv();
 		toolbar.className = "preach-editor-format-bar";
 
 		const makeBtn = (label: string, title: string, open: string, close: string, extraClass?: string): void => {
-			const btn = document.createElement("button");
+			const btn = createEl("button");
 			btn.className = "preach-fmt-btn" + (extraClass ? " " + extraClass : "");
 			btn.setAttribute("aria-label", title);
 			btn.setAttribute("title", title);
 
 			if (label === "highlight") {
 				// Small highlight square icon
-				btn.innerHTML = '<span style="display:inline-block;width:14px;height:14px;background:#ffd24a;border-radius:2px;vertical-align:middle;"></span>';
+				btn.createSpan({ cls: "preach-fmt-swatch" });
 			} else {
 				btn.textContent = label;
 			}
