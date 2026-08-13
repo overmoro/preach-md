@@ -202,11 +202,18 @@ export interface ScriptureRef {
  * Handles:
  *   - Numbered books: "1 Cor", "1Cor", "2 John"
  *   - Full names: "Matthew", "John", "Romans"
+ *   - Names joined by "of": "Song of Solomon", "Song of Songs"
  *   - Verse ranges: "John 3:16-18"
  *   - No verse (chapter only): not supported for now
+ *
+ * The optional "of" matters: without it the book name could only be one or two
+ * capitalised words, so "Song of Solomon 1:1" captured "Solomon 1:1", which
+ * normalises to nothing and was silently skipped. The alias table has always
+ * carried both "song of solomon" and "song of songs", so those aliases were
+ * unreachable from real sermon text.
  */
 const SCRIPTURE_REGEX =
-	/\b((?:[123]\s?)?[A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?/g;
+	/\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?/g;
 
 export function parseReferences(text: string): (ScriptureRef & { index: number; length: number })[] {
 	const results: (ScriptureRef & { index: number; length: number })[] = [];
@@ -215,22 +222,42 @@ export function parseReferences(text: string): (ScriptureRef & { index: number; 
 
 	while ((m = SCRIPTURE_REGEX.exec(text)) !== null) {
 		const rawBook = m[1];
-		const book = normaliseBook(rawBook);
-		if (!book) continue;
+
+		// The book pattern can absorb a capitalised word that precedes the real
+		// name, so "See John 3:16" captures "See John" and "In Romans 8:28"
+		// captures "In Romans". Resolving only the whole capture silently dropped
+		// every reference that began a sentence. Try the longest name first, then
+		// progressively shorter suffixes, so "Song of Solomon" still wins over
+		// "Solomon" and "1 Cor" over "Cor".
+		const words = rawBook.split(" ");
+		let book: BookName | null = null;
+		let offset = 0;
+		for (let w = 0; w < words.length; w++) {
+			const candidate = words.slice(w).join(" ");
+			const resolved = normaliseBook(candidate);
+			if (resolved !== null) {
+				book = resolved;
+				offset = rawBook.length - candidate.length;
+				break;
+			}
+		}
+		if (book === null) continue;
 
 		const chapter = parseInt(m[2], 10);
 		const verseStart = parseInt(m[3], 10);
 		const verseEnd = m[4] ? parseInt(m[4], 10) : verseStart;
 
+		// Trim any absorbed prefix off the match, so the highlighted span covers
+		// the reference itself and not the word before it.
 		results.push({
-			raw: m[0],
+			raw: m[0].slice(offset),
 			book,
 			chapter,
 			verseStart,
 			verseEnd,
 			crossChapter: false,
-			index: m.index,
-			length: m[0].length,
+			index: m.index + offset,
+			length: m[0].length - offset,
 		});
 	}
 
@@ -349,24 +376,18 @@ type BookName = (typeof CANON)[number][0];
  */
 type BookRow = readonly [string, string, (typeof SINGLE_CHAPTER)?];
 
-/**
- * CANON widened to the row contract.
- *
- * The assignment is itself the shape check: a malformed row fails to compile
- * here. Iterating this view rather than CANON directly also makes `row[2]`
- * legal whatever a given row's arity, which lets the derivation below read the
- * flag's value instead of the row's length. Reading length would silently mark
- * every book single-chapter the moment a fourth field is added to a row.
- */
-const CANON_ROWS: readonly BookRow[] = CANON;
-
 // ---------------------------------------------------------------------------
 // Compile-time guards on CANON
 //
-// These are types, so they emit no runtime code and cannot be pruned or
-// flagged as unused variables. Each yields `false` when its invariant breaks,
-// and `Assert` rejects anything but `true`. Note that a guard resolving to
-// `never` would pass silently, since `never` satisfies every constraint.
+// These are types, so they emit no runtime code. They are written inline inside
+// CanonChecked rather than as named aliases so that nothing here is an unused
+// symbol: a standalone `type _CanonAt0 = ...` is never referenced, which is a
+// lint warning in the plugin review scan even though it is doing real work.
+//
+// Assert rejects anything but `true`, so a broken invariant reports at its own
+// line and names the position that moved. Note a guard resolving to `never`
+// would pass silently, since `never` satisfies every constraint, which is why
+// IsExactly yields `false` rather than `never` on a mismatch.
 // ---------------------------------------------------------------------------
 
 type Assert<T extends true> = T;
@@ -375,34 +396,47 @@ type IsExactly<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends
 	: false;
 
 /**
- * The Protestant canon has exactly 66 books. Losing or duplicating a row fails
- * the build instead of silently shifting every canon number after it.
+ * T, but only once CANON satisfies every invariant below.
+ *
+ * The row count pins the canon at 66 books, so losing or duplicating a row
+ * fails the build instead of silently shifting every number after it. The
+ * sentinels pin roughly every eighth position, since canon numbers derive from
+ * row order, so a wholesale reordering, an alphabetised list, or an inserted
+ * row fails rather than quietly renumbering books.
+ *
+ * What the sentinels do NOT catch, stated precisely: any permutation of CANON
+ * that leaves every anchored position intact, however far apart the swapped
+ * rows are. Closing that completely would mean anchoring all 66 positions,
+ * which is the second table this design exists to remove. Runtime coverage for
+ * it belongs in the test harness instead (see issue #4).
  */
-type _CanonRowCount = Assert<IsExactly<(typeof CANON)["length"], 66>>;
+type CanonChecked<T> = [
+	Assert<IsExactly<(typeof CANON)["length"], 66>>,
+	Assert<IsExactly<(typeof CANON)[0][0], "Genesis">>,
+	Assert<IsExactly<(typeof CANON)[8][0], "1 Samuel">>,
+	Assert<IsExactly<(typeof CANON)[16][0], "Esther">>,
+	Assert<IsExactly<(typeof CANON)[24][0], "Lamentations">>,
+	Assert<IsExactly<(typeof CANON)[32][0], "Micah">>,
+	// Both sides of the OT/NT boundary.
+	Assert<IsExactly<(typeof CANON)[38][0], "Malachi">>,
+	Assert<IsExactly<(typeof CANON)[39][0], "Matthew">>,
+	Assert<IsExactly<(typeof CANON)[47][0], "Galatians">>,
+	Assert<IsExactly<(typeof CANON)[55][0], "Titus">>,
+	Assert<IsExactly<(typeof CANON)[65][0], "Revelation">>,
+] extends readonly true[]
+	? T
+	: never;
 
 /**
- * Sentinel positions, since canon numbers are derived from row order. Anchoring
- * roughly every eighth row means a wholesale reordering, an alphabetised list,
- * or an inserted or deleted row fails the build rather than silently renumbering
- * books.
+ * CANON widened to the row contract, and gated on the invariants above.
  *
- * What this does NOT catch, stated precisely: any permutation of CANON that
- * leaves every anchored position intact, no matter how far apart the swapped
- * rows are. Closing that completely would mean anchoring all 66 positions, which
- * is the second table this design exists to remove. The anchors below are the
- * compromise, and they are safe to pin because the Protestant canon is fixed.
+ * The assignment is itself the shape check: a malformed row fails to compile
+ * here. Iterating this view rather than CANON directly also makes `row[2]`
+ * legal whatever a given row's arity, which lets the derivation below read the
+ * flag's value instead of the row's length. Reading length would silently mark
+ * every book single-chapter the moment a fourth field is added to a row.
  */
-type _CanonAt0 = Assert<IsExactly<(typeof CANON)[0][0], "Genesis">>;
-type _CanonAt8 = Assert<IsExactly<(typeof CANON)[8][0], "1 Samuel">>;
-type _CanonAt16 = Assert<IsExactly<(typeof CANON)[16][0], "Esther">>;
-type _CanonAt24 = Assert<IsExactly<(typeof CANON)[24][0], "Lamentations">>;
-type _CanonAt32 = Assert<IsExactly<(typeof CANON)[32][0], "Micah">>;
-/** Both sides of the OT/NT boundary. */
-type _CanonAt38 = Assert<IsExactly<(typeof CANON)[38][0], "Malachi">>;
-type _CanonAt39 = Assert<IsExactly<(typeof CANON)[39][0], "Matthew">>;
-type _CanonAt47 = Assert<IsExactly<(typeof CANON)[47][0], "Galatians">>;
-type _CanonAt55 = Assert<IsExactly<(typeof CANON)[55][0], "Titus">>;
-type _CanonAt65 = Assert<IsExactly<(typeof CANON)[65][0], "Revelation">>;
+const CANON_ROWS: CanonChecked<readonly BookRow[]> = CANON;
 
 /** Everything the path builder needs to know about one book. */
 interface BookMeta {
@@ -422,7 +456,7 @@ interface BookMeta {
  * correct. (`tsconfig` has no `noUncheckedIndexedAccess`, so indexing a
  * `Record` would claim every lookup succeeds.)
  */
-const BOOKS = new Map<string, BookMeta>();
+export const BOOKS = new Map<string, BookMeta>();
 CANON_ROWS.forEach((row, index) => {
 	BOOKS.set(row[0], {
 		prefix: row[1],
@@ -448,7 +482,7 @@ CANON_ROWS.forEach((row, index) => {
  * same plugin. Single-chapter books (Obadiah, Philemon, 2 John, 3 John, Jude)
  * use "{prefix}.md" instead of "{prefix}-01.md" in numbered folders.
  */
-function chapterPaths(csbFolder: string, book: string, chapter: number): string[] {
+export function chapterPaths(csbFolder: string, book: string, chapter: number): string[] {
 	const meta = BOOKS.get(book);
 	const prefix = meta?.prefix ?? book;
 	const candidates: string[] = [];

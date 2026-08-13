@@ -667,28 +667,39 @@ function normaliseBook(raw) {
     return null;
   return (_a = BOOK_MAP[key]) != null ? _a : null;
 }
-var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?/g;
+var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?/g;
 function parseReferences(text) {
   const results = [];
   SCRIPTURE_REGEX.lastIndex = 0;
   let m;
   while ((m = SCRIPTURE_REGEX.exec(text)) !== null) {
     const rawBook = m[1];
-    const book = normaliseBook(rawBook);
-    if (!book)
+    const words = rawBook.split(" ");
+    let book = null;
+    let offset = 0;
+    for (let w = 0; w < words.length; w++) {
+      const candidate = words.slice(w).join(" ");
+      const resolved = normaliseBook(candidate);
+      if (resolved !== null) {
+        book = resolved;
+        offset = rawBook.length - candidate.length;
+        break;
+      }
+    }
+    if (book === null)
       continue;
     const chapter = parseInt(m[2], 10);
     const verseStart = parseInt(m[3], 10);
     const verseEnd = m[4] ? parseInt(m[4], 10) : verseStart;
     results.push({
-      raw: m[0],
+      raw: m[0].slice(offset),
       book,
       chapter,
       verseStart,
       verseEnd,
       crossChapter: false,
-      index: m.index,
-      length: m[0].length
+      index: m.index + offset,
+      length: m[0].length - offset
     });
   }
   return results;
