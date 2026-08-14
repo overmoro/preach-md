@@ -803,3 +803,18 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 .preach-format-fail-notice--visible {
 	opacity: 1;
 }
+
+/*
+ * Fallback placement, used when there is no selection rectangle to sit beside.
+ *
+ * The base rule is position: fixed with every offset left at auto, which does
+ * not centre or corner-pin: the element renders at its hypothetical static
+ * position, so an unpositioned notice drifted with whatever else happened to be
+ * in the body. This is a separate modifier rather than part of the base rule so
+ * the transform cannot fight the inline top/left that positionNotice sets.
+ */
+.preach-format-fail-notice--centred {
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%);
+}

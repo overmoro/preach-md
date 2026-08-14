@@ -90,7 +90,7 @@ export class FormatManager {
 		while (node) {
 			if (node.instanceOf(HTMLElement)) {
 				if (node.classList.contains("preach-scripture-expand")) {
-					this.showFormatFailNotice("scripture-expand");
+					this.showFormatFailNotice("scripture-expand", range.getBoundingClientRect());
 					return null;
 				}
 			}
@@ -121,7 +121,7 @@ export class FormatManager {
 			fn = fn.parentNode;
 		}
 		if (focusBlockEl !== blockEl) {
-			this.showFormatFailNotice("cross-block");
+			this.showFormatFailNotice("cross-block", range.getBoundingClientRect());
 			return null;
 		}
 
@@ -153,7 +153,7 @@ export class FormatManager {
 		}
 
 		if (sourceIdx === -1) {
-			this.showFormatFailNotice("not-found");
+			this.showFormatFailNotice("not-found", range.getBoundingClientRect());
 			return null;
 		}
 
@@ -163,7 +163,7 @@ export class FormatManager {
 		const wrappers = ["**", "*", "==", "<u>"];
 		for (const w of wrappers) {
 			if (before.endsWith(w) && after.startsWith(w === "**" ? "**" : w === "*" ? "*" : w === "==" ? "==" : "</u>")) {
-				this.showFormatFailNotice("collision");
+				this.showFormatFailNotice("collision", range.getBoundingClientRect());
 				return null;
 			}
 		}
@@ -227,8 +227,17 @@ export class FormatManager {
 		this.capturedSelection = null;
 	}
 
-	/** Show a brief notice near the selection area that formatting failed. */
-	showFormatFailNotice(reason: FormatFailReason): void {
+	/**
+	 * Show a brief notice explaining why formatting could not be applied.
+	 *
+	 * Pass the selection's bounding rect where one is available, and the notice
+	 * sits beside the text it is about. Without a rect it falls back to the
+	 * centre of the viewport. The fallback is a modifier class rather than a
+	 * default in the base rule, because the base rule is position: fixed with
+	 * auto offsets, which pins the element at its hypothetical static position
+	 * instead of anywhere meaningful.
+	 */
+	showFormatFailNotice(reason: FormatFailReason, rect?: DOMRect): void {
 		// Ensure a single notice element exists
 		if (!this.noticeEl) {
 			this.noticeEl = createDiv();
@@ -245,24 +254,16 @@ export class FormatManager {
 			document.body.appendChild(this.noticeEl);
 		}
 
-		// Position near centre of viewport - no selection rect available at notice time
-		this.noticeEl.classList.add("preach-format-fail-notice--visible");
-
-		if (this.noticeTimeout !== null) window.clearTimeout(this.noticeTimeout);
-		this.noticeTimeout = window.setTimeout(() => this.hideFormatFailNotice(), 3000);
-	}
-
-	/** Position and show notice near a specific rect. */
-	showFormatFailNoticeAt(rect: DOMRect): void {
-		if (!this.noticeEl) {
-			this.noticeEl = createDiv();
-			this.noticeEl.className = "preach-format-fail-notice";
-			this.noticeEl.textContent = "Can't format here. Use the edit button for changes.";
-			this.noticeEl.addEventListener("pointerdown", () => this.hideFormatFailNotice());
+		// The element is reused across calls, so each mode has to undo the
+		// other's placement rather than assume a clean slate.
+		if (rect) {
+			this.noticeEl.classList.remove("preach-format-fail-notice--centred");
+			this.positionNotice(rect);
+		} else {
+			this.noticeEl.setCssStyles({ top: "", left: "", visibility: "" });
+			this.noticeEl.classList.add("preach-format-fail-notice--centred");
 		}
-		if (!this.noticeEl.isConnected) document.body.appendChild(this.noticeEl);
 
-		this.positionNotice(rect);
 		this.noticeEl.classList.add("preach-format-fail-notice--visible");
 
 		if (this.noticeTimeout !== null) window.clearTimeout(this.noticeTimeout);
