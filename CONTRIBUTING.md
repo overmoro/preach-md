@@ -15,11 +15,14 @@ To work against a real vault, clone into `<vault>/.obsidian/plugins/preach-md` a
 ## Before you open a pull request
 
 ```bash
+npm run lint    # eslint-plugin-obsidianmd, the plugin review ruleset
 npm run build   # tsc --noEmit, then the production bundle
 npm test        # node --test, no extra dependency
 ```
 
-Both run in CI on every push and pull request, along with a check that the committed `main.js` matches a fresh build.
+All three run in CI on every push and pull request, along with a check that the committed `main.js` matches a fresh build.
+
+`npm run lint` runs the same ruleset the Obsidian community plugin review runs against a release, so a finding shows up on the commit that introduced it with a file and a line, rather than as a number on the plugin's scorecard days later. Its rules report as warnings, so the script passes `--max-warnings 0` and any finding fails the build.
 
 ### `main.js` is committed on purpose
 
