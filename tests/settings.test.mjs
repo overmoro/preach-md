@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { PreachMDSettingTab, DEFAULT_SETTINGS } from "./.build/settings.mjs";
+import { PreachMDSettingTab, DEFAULT_SETTINGS, parseStoredSettings } from "./.build/settings.mjs";
 
 /** A settings tab wired to a fake plugin that records saves. */
 function makeTab() {
@@ -104,4 +104,61 @@ test("an unknown key is ignored rather than added to settings", async () => {
 	await tab.setControlValue("nonsense", 1);
 	assert.ok(!("nonsense" in plugin.settings));
 	assert.equal(saves.length, 0);
+});
+
+// ---------------------------------------------------------------------------
+// Stored settings validation
+//
+// Obsidian's loadData() is typed Promise<any>, so before parseStoredSettings
+// existed a hand-edited or partly written data.json went into settings
+// unchecked. A string in targetMinutes would have reached the timer.
+// ---------------------------------------------------------------------------
+
+test("valid stored settings are kept", () => {
+	const out = parseStoredSettings({
+		targetMinutes: 45,
+		warnMinutes: 10,
+		critMinutes: 2,
+		sectionHeadingLevel: 3,
+		csbFolderPath: "  Bible/CSB  ",
+	});
+	assert.deepEqual(out, {
+		targetMinutes: 45,
+		warnMinutes: 10,
+		critMinutes: 2,
+		sectionHeadingLevel: 3,
+		csbFolderPath: "Bible/CSB",
+	});
+});
+
+test("unusable stored values are dropped so the default applies", () => {
+	const out = parseStoredSettings({
+		targetMinutes: "30",        // string, not number
+		warnMinutes: 0,             // below range
+		critMinutes: 1.5,           // not a whole number
+		sectionHeadingLevel: 7,     // above range
+		csbFolderPath: 42,          // not a string
+	});
+	assert.deepEqual(out, {}, "no unusable field should survive");
+	assert.deepEqual({ ...DEFAULT_SETTINGS, ...out }, DEFAULT_SETTINGS);
+});
+
+test("a partial file keeps what it has and defaults the rest", () => {
+	const merged = { ...DEFAULT_SETTINGS, ...parseStoredSettings({ targetMinutes: 20 }) };
+	assert.equal(merged.targetMinutes, 20);
+	assert.equal(merged.warnMinutes, DEFAULT_SETTINGS.warnMinutes);
+	assert.equal(merged.csbFolderPath, DEFAULT_SETTINGS.csbFolderPath);
+});
+
+test("a corrupt or absent file falls back entirely", () => {
+	for (const raw of [null, undefined, "not an object", 7, []]) {
+		const merged = { ...DEFAULT_SETTINGS, ...parseStoredSettings(raw) };
+		assert.deepEqual(merged, DEFAULT_SETTINGS, `failed for ${JSON.stringify(raw)}`);
+	}
+});
+
+test("prototype keys in stored data cannot reach settings", () => {
+	const out = parseStoredSettings(JSON.parse('{"__proto__":{"targetMinutes":999}}'));
+	assert.deepEqual(out, {});
+	assert.equal({ ...DEFAULT_SETTINGS, ...out }.targetMinutes, DEFAULT_SETTINGS.targetMinutes);
 });

@@ -668,13 +668,16 @@ export class ScriptureExpander {
 			for (const ref of refs) {
 				// Text before this reference
 				if (ref.index > cursor) {
-					frag.appendChild(document.createTextNode(text.slice(cursor, ref.index)));
+					frag.appendText(text.slice(cursor, ref.index));
 				}
 
-				// Tappable span
-				const span = createSpan();
-				span.className = "preach-scripture-ref";
-				span.textContent = ref.raw;
+				// Tappable span. createSpan appends as it creates, and nothing
+				// else is added to the fragment in between, so document order is
+				// the same as building it detached and appending at the end.
+				const span = frag.createSpan({
+					cls: "preach-scripture-ref",
+					text: ref.raw,
+				});
 				span.dataset.ref = JSON.stringify({
 					raw: ref.raw,
 					book: ref.book,
@@ -689,13 +692,12 @@ export class ScriptureExpander {
 					void this.handleTap(span, ref);
 				});
 
-				frag.appendChild(span);
 				cursor = ref.index + ref.length;
 			}
 
 			// Remaining text
 			if (cursor < text.length) {
-				frag.appendChild(document.createTextNode(text.slice(cursor)));
+				frag.appendText(text.slice(cursor));
 			}
 
 			node.parentNode?.replaceChild(frag, node);
@@ -752,20 +754,23 @@ export class ScriptureExpander {
 				const tmp = createDiv();
 				await MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
 
+				// Snapshot first: appending moves nodes out of tmp, and childNodes
+				// is live, so iterating it directly would skip every second node.
 				const nodes = Array.from(tmp.childNodes);
 				for (const node of nodes) {
-					if (node.nodeType === Node.ELEMENT_NODE && (node as HTMLElement).tagName === "P") {
-						const children = Array.from(node.childNodes);
-						for (const child of children) {
-							passageEl.appendChild(child);
-						}
+					if (node.instanceOf(HTMLElement) && node.tagName === "P") {
+						// Unwrap the paragraph so verses stay on one flowing line.
+						// Array.from, not a spread: tsconfig's lib is ES6 plus DOM
+						// without dom.iterable, so a NodeList is array-like here
+						// but not iterable. It also snapshots before the move.
+						passageEl.append(...Array.from(node.childNodes));
 					} else {
-						passageEl.appendChild(node);
+						passageEl.append(node);
 					}
 				}
 
 				// Space between verses
-				passageEl.appendChild(document.createTextNode(" "));
+				passageEl.appendText(" ");
 			}
 
 			// Tap on the expansion itself collapses it

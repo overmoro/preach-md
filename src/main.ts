@@ -1,6 +1,11 @@
 import { Plugin, WorkspaceLeaf } from "obsidian";
 import { PREACH_VIEW_TYPE, PreachView } from "./preach-view";
-import { PreachMDSettings, DEFAULT_SETTINGS, PreachMDSettingTab } from "./settings";
+import {
+	PreachMDSettings,
+	DEFAULT_SETTINGS,
+	PreachMDSettingTab,
+	parseStoredSettings,
+} from "./settings";
 
 export default class PreachMDPlugin extends Plugin {
 	settings!: PreachMDSettings;
@@ -35,7 +40,10 @@ export default class PreachMDPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		// loadData() is typed Promise<any>, so the stored value is validated
+		// rather than merged in as-is. Anything unusable falls back to its default.
+		const stored: unknown = await this.loadData();
+		this.settings = { ...DEFAULT_SETTINGS, ...parseStoredSettings(stored) };
 	}
 
 	async saveSettings(): Promise<void> {

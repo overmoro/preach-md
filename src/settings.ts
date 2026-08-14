@@ -18,6 +18,58 @@ export const DEFAULT_SETTINGS: PreachMDSettings = {
 	csbFolderPath: "30_Knowledge/Theology/Bible/CSB",
 };
 
+/**
+ * Read one field off a value already known to be a non-null object.
+ *
+ * The widening to Record<string, unknown> is the one cast here, and it is safe
+ * in the direction that matters: it makes every field `unknown`, so the caller
+ * still has to prove a type before using it. Asserting the stored shape instead
+ * would let a corrupt data.json through untouched.
+ */
+function field(raw: object, key: string): unknown {
+	return (raw as Record<string, unknown>)[key];
+}
+
+/** A whole number within range, or undefined if the stored value is unusable. */
+function boundedInt(value: unknown, min: number, max: number): number | undefined {
+	if (typeof value !== "number" || !Number.isInteger(value)) return undefined;
+	return value >= min && value <= max ? value : undefined;
+}
+
+/**
+ * Validate settings loaded from disk.
+ *
+ * Obsidian's loadData() is typed Promise<any>, so without this every field went
+ * into settings unchecked. A hand-edited or partly written data.json could put
+ * a string in targetMinutes and break the timer, with nothing to show why.
+ * Unusable fields are dropped so the default applies.
+ */
+export function parseStoredSettings(raw: unknown): Partial<PreachMDSettings> {
+	if (typeof raw !== "object" || raw === null) return {};
+
+	const out: Partial<PreachMDSettings> = {};
+
+	// No sensible upper bound on a sermon length, so cap generously rather than
+	// invent a limit that would silently discard a legitimate value.
+	const targetMinutes = boundedInt(field(raw, "targetMinutes"), 1, 24 * 60);
+	if (targetMinutes !== undefined) out.targetMinutes = targetMinutes;
+
+	const warnMinutes = boundedInt(field(raw, "warnMinutes"), 1, 24 * 60);
+	if (warnMinutes !== undefined) out.warnMinutes = warnMinutes;
+
+	const critMinutes = boundedInt(field(raw, "critMinutes"), 1, 24 * 60);
+	if (critMinutes !== undefined) out.critMinutes = critMinutes;
+
+	// Matches the range the settings controls accept.
+	const sectionHeadingLevel = boundedInt(field(raw, "sectionHeadingLevel"), 1, 6);
+	if (sectionHeadingLevel !== undefined) out.sectionHeadingLevel = sectionHeadingLevel;
+
+	const csbFolderPath = field(raw, "csbFolderPath");
+	if (typeof csbFolderPath === "string") out.csbFolderPath = csbFolderPath.trim();
+
+	return out;
+}
+
 export class PreachMDSettingTab extends PluginSettingTab {
 	plugin: PreachMDPlugin;
 

@@ -591,9 +591,10 @@ export class PreachView extends ItemView {
 
 		// Back-pill (if not already present)
 		if (!this.editPills.has(leaf)) {
-			const pill = createEl("button");
-			pill.className = "preach-back-pill";
-			pill.textContent = "← Preach";
+			const pill = host.createEl("button", {
+				cls: "preach-back-pill",
+				text: "← Preach",
+			});
 			pill.setAttribute("aria-label", "Back to preach mode");
 
 			pill.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -604,33 +605,34 @@ export class PreachView extends ItemView {
 				}
 			});
 
-			host.appendChild(pill);
 			this.editPills.set(leaf, pill);
 		}
 
 		// Format toolbar (if not already present)
 		if (!this.editFormatBars.has(leaf)) {
 			window.setTimeout(() => {
-				const toolbar = this.buildEditorFormatBar(leaf);
+				const toolbar = this.buildEditorFormatBar(leaf, host);
 				if (toolbar) {
-					host.appendChild(toolbar);
 					this.editFormatBars.set(leaf, toolbar);
 				}
 			}, 0);
 		}
 	}
 
-	// Build a format toolbar for injection into an editor leaf
-	private buildEditorFormatBar(leaf: WorkspaceLeaf): HTMLElement | null {
+	// Build a format toolbar into an editor leaf. Takes the host so the toolbar
+	// and its buttons are created in place, rather than assembled detached and
+	// appended by the caller. The early return happens before anything is
+	// created, so a rejected leaf still leaves the host untouched.
+	private buildEditorFormatBar(leaf: WorkspaceLeaf, host: HTMLElement): HTMLElement | null {
 		const mdView = leaf.view as MarkdownView;
 		if (!mdView || typeof mdView.editor === "undefined") return null;
 
-		const toolbar = createDiv();
-		toolbar.className = "preach-editor-format-bar";
+		const toolbar = host.createDiv({ cls: "preach-editor-format-bar" });
 
 		const makeBtn = (label: string, title: string, open: string, close: string, extraClass?: string): void => {
-			const btn = createEl("button");
-			btn.className = "preach-fmt-btn" + (extraClass ? " " + extraClass : "");
+			const btn = toolbar.createEl("button", {
+				cls: "preach-fmt-btn" + (extraClass ? " " + extraClass : ""),
+			});
 			btn.setAttribute("aria-label", title);
 			btn.setAttribute("title", title);
 
@@ -651,8 +653,6 @@ export class PreachView extends ItemView {
 				if (!selected) return;
 				editor.replaceSelection(open + selected + close);
 			});
-
-			toolbar.appendChild(btn);
 		};
 
 		makeBtn("B", "Bold", "**", "**", "preach-fmt-btn--bold");

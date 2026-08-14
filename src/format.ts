@@ -240,19 +240,16 @@ export class FormatManager {
 	showFormatFailNotice(reason: FormatFailReason, rect?: DOMRect): void {
 		// Ensure a single notice element exists
 		if (!this.noticeEl) {
-			this.noticeEl = createDiv();
-			this.noticeEl.className = "preach-format-fail-notice";
+			// Created straight into body. destroy() nulls this field whenever it
+			// removes the element, so a non-null noticeEl is always connected and
+			// there is no detached state to re-attach from.
+			this.noticeEl = document.body.createDiv({ cls: "preach-format-fail-notice" });
 			this.noticeEl.addEventListener("pointerdown", () => this.hideFormatFailNotice());
 		}
 
 		// Set on every call, not just on creation: the element is reused, so a
 		// later failure would otherwise show the previous reason's message.
 		this.noticeEl.textContent = FORMAT_FAIL_MESSAGE[reason];
-
-		// Attach to body if not already
-		if (!this.noticeEl.isConnected) {
-			document.body.appendChild(this.noticeEl);
-		}
 
 		// The element is reused across calls, so each mode has to undo the
 		// other's placement rather than assume a clean slate.
@@ -345,8 +342,7 @@ export class PreachFormatToolbar {
 		this.bodyElGetter = bodyElGetter;
 		this.containerEl = containerEl;
 
-		this.toolbarEl = this.buildToolbar();
-		this.containerEl.appendChild(this.toolbarEl);
+		this.toolbarEl = this.buildToolbar(this.containerEl);
 
 		this.touchStartHandler = (): void => {
 			this.touchActive = true;
@@ -383,9 +379,8 @@ export class PreachFormatToolbar {
 		document.addEventListener("selectionchange", this.selectionChangeHandler);
 	}
 
-	private buildToolbar(): HTMLElement {
-		const bar = createDiv();
-		bar.className = "preach-inline-format-bar";
+	private buildToolbar(parent: HTMLElement): HTMLElement {
+		const bar = parent.createDiv({ cls: "preach-inline-format-bar" });
 		bar.setAttribute("aria-label", "Format selection");
 
 		const makeBtn = (
@@ -394,8 +389,9 @@ export class PreachFormatToolbar {
 			wrapper: FormatWrapper,
 			extraClass?: string
 		): void => {
-			const btn = createEl("button");
-			btn.className = "preach-inline-fmt-btn" + (extraClass ? " " + extraClass : "");
+			const btn = bar.createEl("button", {
+				cls: "preach-inline-fmt-btn" + (extraClass ? " " + extraClass : ""),
+			});
 			btn.setAttribute("aria-label", title);
 			btn.setAttribute("title", title);
 			if (label === "H") {
@@ -426,8 +422,6 @@ export class PreachFormatToolbar {
 					window.getSelection()?.removeAllRanges();
 				});
 			});
-
-			bar.appendChild(btn);
 		};
 
 		makeBtn("B", "Bold", FORMAT_BOLD, "preach-inline-fmt-btn--bold");

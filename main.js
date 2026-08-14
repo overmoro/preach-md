@@ -904,11 +904,12 @@ var ScriptureExpander = class {
       let cursor = 0;
       for (const ref of refs) {
         if (ref.index > cursor) {
-          frag.appendChild(document.createTextNode(text.slice(cursor, ref.index)));
+          frag.appendText(text.slice(cursor, ref.index));
         }
-        const span = createSpan();
-        span.className = "preach-scripture-ref";
-        span.textContent = ref.raw;
+        const span = frag.createSpan({
+          cls: "preach-scripture-ref",
+          text: ref.raw
+        });
         span.dataset.ref = JSON.stringify({
           raw: ref.raw,
           book: ref.book,
@@ -921,11 +922,10 @@ var ScriptureExpander = class {
           e.stopPropagation();
           void this.handleTap(span, ref);
         });
-        frag.appendChild(span);
         cursor = ref.index + ref.length;
       }
       if (cursor < text.length) {
-        frag.appendChild(document.createTextNode(text.slice(cursor)));
+        frag.appendText(text.slice(cursor));
       }
       (_b = node.parentNode) == null ? void 0 : _b.replaceChild(frag, node);
       return;
@@ -965,16 +965,13 @@ var ScriptureExpander = class {
         await import_obsidian.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
         const nodes = Array.from(tmp.childNodes);
         for (const node of nodes) {
-          if (node.nodeType === Node.ELEMENT_NODE && node.tagName === "P") {
-            const children = Array.from(node.childNodes);
-            for (const child of children) {
-              passageEl.appendChild(child);
-            }
+          if (node.instanceOf(HTMLElement) && node.tagName === "P") {
+            passageEl.append(...Array.from(node.childNodes));
           } else {
-            passageEl.appendChild(node);
+            passageEl.append(node);
           }
         }
-        passageEl.appendChild(document.createTextNode(" "));
+        passageEl.appendText(" ");
       }
       expandEl.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
@@ -1173,14 +1170,10 @@ var FormatManager = class {
    */
   showFormatFailNotice(reason, rect) {
     if (!this.noticeEl) {
-      this.noticeEl = createDiv();
-      this.noticeEl.className = "preach-format-fail-notice";
+      this.noticeEl = document.body.createDiv({ cls: "preach-format-fail-notice" });
       this.noticeEl.addEventListener("pointerdown", () => this.hideFormatFailNotice());
     }
     this.noticeEl.textContent = FORMAT_FAIL_MESSAGE[reason];
-    if (!this.noticeEl.isConnected) {
-      document.body.appendChild(this.noticeEl);
-    }
     if (rect) {
       this.noticeEl.classList.remove("preach-format-fail-notice--centred");
       this.positionNotice(rect);
@@ -1243,8 +1236,7 @@ var PreachFormatToolbar = class {
     this.formatManager = formatManager;
     this.bodyElGetter = bodyElGetter;
     this.containerEl = containerEl;
-    this.toolbarEl = this.buildToolbar();
-    this.containerEl.appendChild(this.toolbarEl);
+    this.toolbarEl = this.buildToolbar(this.containerEl);
     this.touchStartHandler = () => {
       this.touchActive = true;
       this.hide();
@@ -1271,13 +1263,13 @@ var PreachFormatToolbar = class {
     document.addEventListener("touchcancel", this.touchEndHandler, { passive: true });
     document.addEventListener("selectionchange", this.selectionChangeHandler);
   }
-  buildToolbar() {
-    const bar = createDiv();
-    bar.className = "preach-inline-format-bar";
+  buildToolbar(parent) {
+    const bar = parent.createDiv({ cls: "preach-inline-format-bar" });
     bar.setAttribute("aria-label", "Format selection");
     const makeBtn = (label, title, wrapper, extraClass) => {
-      const btn = createEl("button");
-      btn.className = "preach-inline-fmt-btn" + (extraClass ? " " + extraClass : "");
+      const btn = bar.createEl("button", {
+        cls: "preach-inline-fmt-btn" + (extraClass ? " " + extraClass : "")
+      });
       btn.setAttribute("aria-label", title);
       btn.setAttribute("title", title);
       if (label === "H") {
@@ -1304,7 +1296,6 @@ var PreachFormatToolbar = class {
           (_a = window.getSelection()) == null ? void 0 : _a.removeAllRanges();
         });
       });
-      bar.appendChild(btn);
     };
     makeBtn("B", "Bold", FORMAT_BOLD, "preach-inline-fmt-btn--bold");
     makeBtn("I", "Italic", FORMAT_ITALIC, "preach-inline-fmt-btn--italic");
@@ -1817,9 +1808,10 @@ var PreachView = class extends import_obsidian2.ItemView {
       return;
     const host = leaf.view.containerEl;
     if (!this.editPills.has(leaf)) {
-      const pill = createEl("button");
-      pill.className = "preach-back-pill";
-      pill.textContent = "\u2190 Preach";
+      const pill = host.createEl("button", {
+        cls: "preach-back-pill",
+        text: "\u2190 Preach"
+      });
       pill.setAttribute("aria-label", "Back to preach mode");
       pill.addEventListener("pointerdown", (e) => {
         e.preventDefault();
@@ -1828,29 +1820,30 @@ var PreachView = class extends import_obsidian2.ItemView {
           this.app.workspace.setActiveLeaf(this.preachLeaf, { focus: true });
         }
       });
-      host.appendChild(pill);
       this.editPills.set(leaf, pill);
     }
     if (!this.editFormatBars.has(leaf)) {
       window.setTimeout(() => {
-        const toolbar = this.buildEditorFormatBar(leaf);
+        const toolbar = this.buildEditorFormatBar(leaf, host);
         if (toolbar) {
-          host.appendChild(toolbar);
           this.editFormatBars.set(leaf, toolbar);
         }
       }, 0);
     }
   }
-  // Build a format toolbar for injection into an editor leaf
-  buildEditorFormatBar(leaf) {
+  // Build a format toolbar into an editor leaf. Takes the host so the toolbar
+  // and its buttons are created in place, rather than assembled detached and
+  // appended by the caller. The early return happens before anything is
+  // created, so a rejected leaf still leaves the host untouched.
+  buildEditorFormatBar(leaf, host) {
     const mdView = leaf.view;
     if (!mdView || typeof mdView.editor === "undefined")
       return null;
-    const toolbar = createDiv();
-    toolbar.className = "preach-editor-format-bar";
+    const toolbar = host.createDiv({ cls: "preach-editor-format-bar" });
     const makeBtn = (label, title, open, close, extraClass) => {
-      const btn = createEl("button");
-      btn.className = "preach-fmt-btn" + (extraClass ? " " + extraClass : "");
+      const btn = toolbar.createEl("button", {
+        cls: "preach-fmt-btn" + (extraClass ? " " + extraClass : "")
+      });
       btn.setAttribute("aria-label", title);
       btn.setAttribute("title", title);
       if (label === "highlight") {
@@ -1869,7 +1862,6 @@ var PreachView = class extends import_obsidian2.ItemView {
           return;
         editor.replaceSelection(open + selected + close);
       });
-      toolbar.appendChild(btn);
     };
     makeBtn("B", "Bold", "**", "**", "preach-fmt-btn--bold");
     makeBtn("I", "Italic", "*", "*", "preach-fmt-btn--italic");
@@ -1960,6 +1952,35 @@ var DEFAULT_SETTINGS = {
   sectionHeadingLevel: 2,
   csbFolderPath: "30_Knowledge/Theology/Bible/CSB"
 };
+function field(raw, key) {
+  return raw[key];
+}
+function boundedInt(value, min, max) {
+  if (typeof value !== "number" || !Number.isInteger(value))
+    return void 0;
+  return value >= min && value <= max ? value : void 0;
+}
+function parseStoredSettings(raw) {
+  if (typeof raw !== "object" || raw === null)
+    return {};
+  const out = {};
+  const targetMinutes = boundedInt(field(raw, "targetMinutes"), 1, 24 * 60);
+  if (targetMinutes !== void 0)
+    out.targetMinutes = targetMinutes;
+  const warnMinutes = boundedInt(field(raw, "warnMinutes"), 1, 24 * 60);
+  if (warnMinutes !== void 0)
+    out.warnMinutes = warnMinutes;
+  const critMinutes = boundedInt(field(raw, "critMinutes"), 1, 24 * 60);
+  if (critMinutes !== void 0)
+    out.critMinutes = critMinutes;
+  const sectionHeadingLevel = boundedInt(field(raw, "sectionHeadingLevel"), 1, 6);
+  if (sectionHeadingLevel !== void 0)
+    out.sectionHeadingLevel = sectionHeadingLevel;
+  const csbFolderPath = field(raw, "csbFolderPath");
+  if (typeof csbFolderPath === "string")
+    out.csbFolderPath = csbFolderPath.trim();
+  return out;
+}
 var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
@@ -2165,7 +2186,8 @@ var PreachMDPlugin = class extends import_obsidian4.Plugin {
   onunload() {
   }
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const stored = await this.loadData();
+    this.settings = { ...DEFAULT_SETTINGS, ...parseStoredSettings(stored) };
   }
   async saveSettings() {
     await this.saveData(this.settings);
