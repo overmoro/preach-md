@@ -4,11 +4,16 @@
     "inlineSourceMap": true,
     "inlineSources": true,
     "module": "ESNext",
-    "target": "ES6",
+    "target": "ES2018",
     "allowSyntheticDefaultImports": true,
     "importHelpers": true,
     "jsx": "react",
-    "lib": ["ES6", "DOM"],
+    // ES2018 to match the esbuild target. ES6 alone omits
+    // String.prototype.padStart, which src uses in three places. That only
+    // type-checked because @types/node happens to reference a wider lib, so
+    // dropping that dependency would have broken the build, and any tool
+    // resolving types differently saw those calls as error-typed.
+    "lib": ["ES2018", "DOM"],
     "moduleResolution": "node",
     "strict": true,
     "skipLibCheck": true
