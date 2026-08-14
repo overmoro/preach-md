@@ -259,14 +259,14 @@ export class PreachView extends ItemView {
 		root.addClass("preach-md-root");
 
 		// Scrollable content area
-		this.scrollEl = root.createEl("div", { cls: "preach-content" });
+		this.scrollEl = root.createDiv({ cls: "preach-content" });
 		this.scrollEl.addEventListener("scroll", () => {
 			this.savedScrollTop = this.scrollEl.scrollTop;
 			this.resetIdleTimer();
 		});
 
 		// Timer - top-centre, always visible, persistent
-		this.timerEl = root.createEl("div", { cls: "preach-timer-corner" });
+		this.timerEl = root.createDiv({ cls: "preach-timer-corner" });
 		this.timer = new PreachTimer(this.timerEl, {
 			targetMinutes: this.plugin.settings.targetMinutes,
 			warnMinutes: this.plugin.settings.warnMinutes,
@@ -274,7 +274,7 @@ export class PreachView extends ItemView {
 		});
 
 		// Bottom buttons container - three floating icon-only buttons, auto-fade
-		this.bottomBtns = root.createEl("div", { cls: "preach-bottom-btns" });
+		this.bottomBtns = root.createDiv({ cls: "preach-bottom-btns" });
 
 		// Outline button - bottom-left
 		this.outlineBtn = this.bottomBtns.createEl("button", {
@@ -294,7 +294,7 @@ export class PreachView extends ItemView {
 		});
 
 		// Right-side group: edit + exit
-		const rightGroup = this.bottomBtns.createEl("div", { cls: "preach-bottom-right" });
+		const rightGroup = this.bottomBtns.createDiv({ cls: "preach-bottom-right" });
 
 		// Edit button - second from right
 		this.editBtn = rightGroup.createEl("button", {
@@ -313,8 +313,8 @@ export class PreachView extends ItemView {
 		});
 
 		// Exit button with confirm chip - bottom-right corner
-		const exitWrap = rightGroup.createEl("div", { cls: "preach-exit-wrap" });
-		this.exitChip = exitWrap.createEl("span", {
+		const exitWrap = rightGroup.createDiv({ cls: "preach-exit-wrap" });
+		this.exitChip = exitWrap.createSpan({
 			cls: "preach-exit-chip",
 			text: "Exit?",
 		});
@@ -342,7 +342,7 @@ export class PreachView extends ItemView {
 		this.highlightManager.init(null, this.scrollEl, this.scrollEl);
 
 		// Outline overlay (hidden by default)
-		this.overlayEl = root.createEl("div", {
+		this.overlayEl = root.createDiv({
 			cls: "preach-outline-overlay preach-outline-overlay--hidden",
 		});
 		this.overlayEl.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -384,7 +384,7 @@ export class PreachView extends ItemView {
 		// Store blocks in highlight manager
 		this.highlightManager.attachBlocks(blocks);
 
-		const body = this.scrollEl.createEl("div", { cls: "preach-body" });
+		const body = this.scrollEl.createDiv({ cls: "preach-body" });
 		this.preachBodyEl = body;
 		if (this.formatManager) {
 			this.formatManager.updateBlocks(blocks);
@@ -392,7 +392,7 @@ export class PreachView extends ItemView {
 
 		for (let i = 0; i < blocks.length; i++) {
 			const block = blocks[i];
-			const wrapper = body.createEl("div", {
+			const wrapper = body.createDiv({
 				cls: "preach-block",
 				attr: {
 					"data-block-index": String(i),
@@ -471,7 +471,7 @@ export class PreachView extends ItemView {
 		// Rebuild panel each time (file may have changed)
 		const panel =
 			this.overlayEl.querySelector<HTMLElement>(".preach-outline-panel") ??
-			this.overlayEl.createEl("div", { cls: "preach-outline-panel" });
+			this.overlayEl.createDiv({ cls: "preach-outline-panel" });
 		panel.empty();
 
 		const level = this.plugin.settings.sectionHeadingLevel;

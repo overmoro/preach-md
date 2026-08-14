@@ -46,11 +46,11 @@ var PreachTimer = class {
     this.singleTapTimeout = null;
     this.thresholds = thresholds;
     this.remainingAtPause = thresholds.targetMinutes * 60;
-    this.el = container.createEl("div", { cls: "preach-timer" });
+    this.el = container.createDiv({ cls: "preach-timer" });
     this.el.setAttribute("role", "timer");
     this.el.setAttribute("aria-live", "off");
     this.el.dataset.runState = "idle";
-    this.labelEl = container.createEl("div", { cls: "preach-timer-label" });
+    this.labelEl = container.createDiv({ cls: "preach-timer-label" });
     this.labelEl.textContent = "Start";
     this.el.addEventListener("pointerdown", (e) => {
       e.stopPropagation();
@@ -900,7 +900,7 @@ var ScriptureExpander = class {
       const refs = parseReferences(text);
       if (refs.length === 0)
         return;
-      const frag = document.createDocumentFragment();
+      const frag = createFragment();
       let cursor = 0;
       for (const ref of refs) {
         if (ref.index > cursor) {
@@ -958,7 +958,7 @@ var ScriptureExpander = class {
       const verses = await fetchVerses(this.app, this.csbFolder, ref);
       expandEl.empty();
       expandEl.className = "preach-scripture-expand";
-      const passageEl = expandEl.createEl("span", { cls: "preach-scripture-passage" });
+      const passageEl = expandEl.createSpan({ cls: "preach-scripture-passage" });
       for (const { verse, text } of verses) {
         passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: String(verse) });
         const tmp = createDiv();
@@ -983,7 +983,7 @@ var ScriptureExpander = class {
       expandEl.empty();
       expandEl.className = "preach-scripture-expand preach-scripture-expand--error";
       const msg = err instanceof Error ? err.message : `Could not load ${ref.raw}`;
-      expandEl.createEl("span", { cls: "preach-scripture-error-text", text: msg });
+      expandEl.createSpan({ cls: "preach-scripture-error-text", text: msg });
       expandEl.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         expandEl.remove();
@@ -1534,18 +1534,18 @@ var PreachView = class extends import_obsidian2.ItemView {
     const root = this.containerEl;
     root.empty();
     root.addClass("preach-md-root");
-    this.scrollEl = root.createEl("div", { cls: "preach-content" });
+    this.scrollEl = root.createDiv({ cls: "preach-content" });
     this.scrollEl.addEventListener("scroll", () => {
       this.savedScrollTop = this.scrollEl.scrollTop;
       this.resetIdleTimer();
     });
-    this.timerEl = root.createEl("div", { cls: "preach-timer-corner" });
+    this.timerEl = root.createDiv({ cls: "preach-timer-corner" });
     this.timer = new PreachTimer(this.timerEl, {
       targetMinutes: this.plugin.settings.targetMinutes,
       warnMinutes: this.plugin.settings.warnMinutes,
       critMinutes: this.plugin.settings.critMinutes
     });
-    this.bottomBtns = root.createEl("div", { cls: "preach-bottom-btns" });
+    this.bottomBtns = root.createDiv({ cls: "preach-bottom-btns" });
     this.outlineBtn = this.bottomBtns.createEl("button", {
       cls: "preach-corner-btn preach-corner-btn--outline",
       attr: { "aria-label": "Outline", title: "Outline" }
@@ -1561,7 +1561,7 @@ var PreachView = class extends import_obsidian2.ItemView {
       this.resetIdleTimer();
       this.toggleOutline();
     });
-    const rightGroup = this.bottomBtns.createEl("div", { cls: "preach-bottom-right" });
+    const rightGroup = this.bottomBtns.createDiv({ cls: "preach-bottom-right" });
     this.editBtn = rightGroup.createEl("button", {
       cls: "preach-corner-btn",
       attr: { "aria-label": "Edit note", title: "Edit" }
@@ -1576,8 +1576,8 @@ var PreachView = class extends import_obsidian2.ItemView {
       this.resetIdleTimer();
       this.goToEdit();
     });
-    const exitWrap = rightGroup.createEl("div", { cls: "preach-exit-wrap" });
-    this.exitChip = exitWrap.createEl("span", {
+    const exitWrap = rightGroup.createDiv({ cls: "preach-exit-wrap" });
+    this.exitChip = exitWrap.createSpan({
       cls: "preach-exit-chip",
       text: "Exit?"
     });
@@ -1599,7 +1599,7 @@ var PreachView = class extends import_obsidian2.ItemView {
       this.resetIdleTimer();
     });
     this.highlightManager.init(null, this.scrollEl, this.scrollEl);
-    this.overlayEl = root.createEl("div", {
+    this.overlayEl = root.createDiv({
       cls: "preach-outline-overlay preach-outline-overlay--hidden"
     });
     this.overlayEl.addEventListener("pointerdown", (e) => {
@@ -1631,14 +1631,14 @@ var PreachView = class extends import_obsidian2.ItemView {
     const blocks = parseBlocks(markdown);
     this.blocks = blocks;
     this.highlightManager.attachBlocks(blocks);
-    const body = this.scrollEl.createEl("div", { cls: "preach-body" });
+    const body = this.scrollEl.createDiv({ cls: "preach-body" });
     this.preachBodyEl = body;
     if (this.formatManager) {
       this.formatManager.updateBlocks(blocks);
     }
     for (let i = 0; i < blocks.length; i++) {
       const block = blocks[i];
-      const wrapper = body.createEl("div", {
+      const wrapper = body.createDiv({
         cls: "preach-block",
         attr: {
           "data-block-index": String(i),
@@ -1701,7 +1701,7 @@ var PreachView = class extends import_obsidian2.ItemView {
     var _a;
     if (!this.file)
       return;
-    const panel = (_a = this.overlayEl.querySelector(".preach-outline-panel")) != null ? _a : this.overlayEl.createEl("div", { cls: "preach-outline-panel" });
+    const panel = (_a = this.overlayEl.querySelector(".preach-outline-panel")) != null ? _a : this.overlayEl.createDiv({ cls: "preach-outline-panel" });
     panel.empty();
     const level = this.plugin.settings.sectionHeadingLevel;
     const tag = `h${level}`;

@@ -662,7 +662,7 @@ export class ScriptureExpander {
 			if (refs.length === 0) return;
 
 			// Build replacement fragment
-			const frag = document.createDocumentFragment();
+			const frag = createFragment();
 			let cursor = 0;
 
 			for (const ref of refs) {
@@ -743,7 +743,7 @@ export class ScriptureExpander {
 
 			// Render all verses as a single flowing paragraph.
 			// Each verse gets an inline superscript number; no block breaks between verses.
-			const passageEl = expandEl.createEl("span", { cls: "preach-scripture-passage" });
+			const passageEl = expandEl.createSpan({ cls: "preach-scripture-passage" });
 
 			for (const { verse, text } of verses) {
 				// Superscript verse number
@@ -784,7 +784,7 @@ export class ScriptureExpander {
 			expandEl.empty();
 			expandEl.className = "preach-scripture-expand preach-scripture-expand--error";
 			const msg = err instanceof Error ? err.message : `Could not load ${ref.raw}`;
-			expandEl.createEl("span", { cls: "preach-scripture-error-text", text: msg });
+			expandEl.createSpan({ cls: "preach-scripture-error-text", text: msg });
 
 			expandEl.addEventListener("pointerdown", (e: PointerEvent) => {
 				e.stopPropagation();

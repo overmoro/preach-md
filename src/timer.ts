@@ -31,12 +31,12 @@ export class PreachTimer {
 		this.thresholds = thresholds;
 		this.remainingAtPause = thresholds.targetMinutes * 60;
 
-		this.el = container.createEl("div", { cls: "preach-timer" });
+		this.el = container.createDiv({ cls: "preach-timer" });
 		this.el.setAttribute("role", "timer");
 		this.el.setAttribute("aria-live", "off");
 		this.el.dataset.runState = "idle";
 
-		this.labelEl = container.createEl("div", { cls: "preach-timer-label" });
+		this.labelEl = container.createDiv({ cls: "preach-timer-label" });
 		this.labelEl.textContent = "Start";
 
 		this.el.addEventListener("pointerdown", (e) => {
