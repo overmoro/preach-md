@@ -127,6 +127,13 @@ export class PreachTimer {
 		this.renderDisplay();
 	}
 
+	// Seconds spent so far, or null while idle. Frozen while paused.
+	// ponytail: if preach-minutes changes mid-run, updateThresholds keeps the remaining time so elapsed jumps by the difference; revisit if pacing is used with mid-sermon frontmatter edits
+	elapsedSeconds(): number | null {
+		if (this.runState === "idle") return null;
+		return this.thresholds.targetMinutes * 60 - this.computeRemaining();
+	}
+
 	private clearInterval(): void {
 		if (this.intervalId !== null) {
 			window.clearInterval(this.intervalId);

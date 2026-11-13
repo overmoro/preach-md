@@ -35,6 +35,14 @@ var import_obsidian3 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian = require("obsidian");
+var SECTION_STRIP_OPTIONS = {
+  off: "Off",
+  sections: "Sections",
+  pacing: "Sections and pacing"
+};
+function isSectionStripMode(value) {
+  return value === "off" || value === "sections" || value === "pacing";
+}
 var MIN_TEXT_SCALE = 70;
 var MAX_TEXT_SCALE = 200;
 var TEXT_SCALE_STEP = 10;
@@ -43,6 +51,7 @@ var DEFAULT_SETTINGS = {
   warnMinutes: 5,
   critMinutes: 1,
   sectionHeadingLevel: 2,
+  sectionStrip: "sections",
   csbFolderPath: "30_Knowledge/Theology/Bible/CSB",
   textScalePercent: 100
 };
@@ -80,6 +89,9 @@ function parseStoredSettings(raw) {
   const sectionHeadingLevel = boundedInt(field(raw, "sectionHeadingLevel"), 1, 6);
   if (sectionHeadingLevel !== void 0)
     out.sectionHeadingLevel = sectionHeadingLevel;
+  const sectionStrip = field(raw, "sectionStrip");
+  if (isSectionStripMode(sectionStrip))
+    out.sectionStrip = sectionStrip;
   const csbFolderPath = field(raw, "csbFolderPath");
   if (typeof csbFolderPath === "string")
     out.csbFolderPath = csbFolderPath.trim();
@@ -161,6 +173,17 @@ var PreachMDSettingTab = class extends import_obsidian.PluginSettingTab {
               min: 1,
               max: 6
             }
+          },
+          {
+            name: "Section strip",
+            desc: "A strip on the right edge with one segment per section; the one you're reading is lit. Tap the screen to wake the controls, then tap a segment to jump. With pacing, a planned time at the end of a section heading, like (~5 min), is hidden from the heading and the strip shows whether you're ahead or behind once the timer is running. Applies the next time you open preach mode.",
+            aliases: ["pacing", "progress", "sections", "outline"],
+            control: {
+              type: "dropdown",
+              key: "sectionStrip",
+              defaultValue: DEFAULT_SETTINGS.sectionStrip,
+              options: SECTION_STRIP_OPTIONS
+            }
           }
         ]
       },
@@ -228,6 +251,11 @@ var PreachMDSettingTab = class extends import_obsidian.PluginSettingTab {
         settings.sectionHeadingLevel = n;
         break;
       }
+      case "sectionStrip":
+        if (!isSectionStripMode(value))
+          return;
+        settings.sectionStrip = value;
+        break;
       case "textScalePercent": {
         const n = Number(value);
         if (!Number.isInteger(n) || n < MIN_TEXT_SCALE || n > MAX_TEXT_SCALE)
@@ -284,6 +312,13 @@ var PreachMDSettingTab = class extends import_obsidian.PluginSettingTab {
           this.plugin.settings.sectionHeadingLevel = n;
           void this.plugin.saveSettings();
         }
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("Section strip").setDesc(
+      "A strip on the right edge with one segment per section; the one you're reading is lit. Tap the screen to wake the controls, then tap a segment to jump. With pacing, a planned time at the end of a section heading, like (~5 min), is hidden from the heading and the strip shows whether you're ahead or behind once the timer is running. Applies the next time you open preach mode."
+    ).addDropdown(
+      (dropdown) => dropdown.addOptions(SECTION_STRIP_OPTIONS).setValue(this.plugin.settings.sectionStrip).onChange((value) => {
+        void this.setControlValue("sectionStrip", value);
       })
     );
     new import_obsidian.Setting(containerEl).setName("Display").setHeading();
@@ -395,6 +430,13 @@ var PreachTimer = class {
     this.el.dataset.runState = "idle";
     this.remainingAtPause = this.thresholds.targetMinutes * 60;
     this.renderDisplay();
+  }
+  // Seconds spent so far, or null while idle. Frozen while paused.
+  // ponytail: if preach-minutes changes mid-run, updateThresholds keeps the remaining time so elapsed jumps by the difference; revisit if pacing is used with mid-sermon frontmatter edits
+  elapsedSeconds() {
+    if (this.runState === "idle")
+      return null;
+    return this.thresholds.targetMinutes * 60 - this.computeRemaining();
   }
   clearInterval() {
     if (this.intervalId !== null) {
@@ -1278,6 +1320,193 @@ var ScriptureExpander = class {
   }
 };
 
+// src/section-strip.ts
+var GRACE_SECONDS = 30;
+var MAX_SECTION_MINUTES = 120;
+var TIME_TOKEN = /\(\s*~?\s*(\d+(?:[.,]\d+)?)\s*(?:minutes?|mins?)\s*\)\s*$/i;
+function parseTime(text) {
+  const m = TIME_TOKEN.exec(text);
+  if (!m)
+    return null;
+  const minutes = Number(m[1].replace(",", "."));
+  if (!(minutes > 0 && minutes <= MAX_SECTION_MINUTES))
+    return null;
+  return { minutes, rest: text.slice(0, m.index).trimEnd() };
+}
+function readHeadingTime(full, lastText) {
+  const whole = parseTime(full);
+  if (!whole || whole.rest.trim() === "")
+    return null;
+  const last = parseTime(lastText);
+  if (!last)
+    return null;
+  return { minutes: whole.minutes, lastRest: last.rest };
+}
+function sectionPace(plans, current, elapsedSec) {
+  if (elapsedSec === null)
+    return null;
+  const secs = plans.map((p) => p === null ? 0 : Math.round(p * 60));
+  const start = [];
+  let total = 0;
+  let lastTimed = -1;
+  secs.forEach((s, i) => {
+    start.push(total);
+    total += s;
+    if (plans[i] !== null)
+      lastTimed = i;
+  });
+  if (lastTimed < 0)
+    return null;
+  let planned = lastTimed;
+  let fraction = 1;
+  for (let i = 0; i < plans.length; i++) {
+    if (plans[i] !== null && elapsedSec < start[i] + secs[i]) {
+      planned = i;
+      fraction = Math.min(1, Math.max(0, (elapsedSec - start[i]) / secs[i]));
+      break;
+    }
+  }
+  let pace = null;
+  if (current >= 0 && plans[current] !== null) {
+    if (elapsedSec < start[current] - GRACE_SECONDS)
+      pace = "ahead";
+    else if (elapsedSec > start[current] + secs[current] + GRACE_SECONDS)
+      pace = "behind";
+    else
+      pace = "on";
+  }
+  return { pace, planned, fraction };
+}
+function currentSectionIndex(tops, line, viewportHeight, atBottom) {
+  const limit = atBottom ? viewportHeight : line;
+  let current = -1;
+  tops.forEach((top, i) => {
+    if (atBottom ? top < limit : top <= limit)
+      current = i;
+  });
+  return current;
+}
+function sectionHeadingEls(root, level) {
+  return Array.from(root.querySelectorAll("h" + level));
+}
+var TEXT_NODE = 3;
+function lastTextNode(node) {
+  var _a;
+  for (let n = node.lastChild; n; n = n.previousSibling) {
+    if (n.nodeType === TEXT_NODE) {
+      if (((_a = n.textContent) != null ? _a : "").trim() !== "")
+        return n;
+    } else {
+      const found = lastTextNode(n);
+      if (found)
+        return found;
+    }
+  }
+  return null;
+}
+function tidy(heading) {
+  var _a, _b;
+  const last = lastTextNode(heading);
+  if (!last)
+    return null;
+  const read = readHeadingTime((_a = heading.textContent) != null ? _a : "", (_b = last.textContent) != null ? _b : "");
+  if (!read)
+    return null;
+  last.textContent = read.lastRest;
+  return read.minutes;
+}
+var SectionStrip = class {
+  constructor(parent, scrollEl, elapsedSeconds) {
+    this.scrollEl = scrollEl;
+    this.elapsedSeconds = elapsedSeconds;
+    this.headings = [];
+    this.segs = [];
+    this.plans = [];
+    this.timeline = false;
+    this.lastKey = "";
+    this.nav = parent.createEl("nav", {
+      cls: "preach-strip preach-strip--hidden",
+      attr: { "aria-label": "Sections", "data-ignore-swipe": "true" }
+    });
+    this.playhead = createDiv({ cls: "preach-strip-playhead" });
+  }
+  build(headings, pacing) {
+    this.playhead.remove();
+    this.nav.empty();
+    this.headings = [];
+    this.segs = [];
+    this.plans = [];
+    this.timeline = false;
+    this.lastKey = "";
+    this.nav.removeAttribute("data-pace");
+    this.nav.classList.remove("preach-strip--timeline");
+    if (headings.length < 2) {
+      this.nav.classList.add("preach-strip--hidden");
+      return;
+    }
+    this.headings = headings;
+    this.plans = headings.map((h) => pacing ? tidy(h) : null);
+    this.timeline = this.plans.some((p) => p !== null);
+    this.nav.classList.toggle("preach-strip--timeline", this.timeline);
+    this.nav.classList.remove("preach-strip--hidden");
+    headings.forEach((heading, i) => {
+      var _a;
+      const plan = this.plans[i];
+      const label = ((_a = heading.textContent) != null ? _a : "").trim();
+      const seg = this.nav.createEl("button", {
+        cls: "preach-strip-seg",
+        attr: { "aria-label": plan === null ? label : `${label}, ${plan} min` }
+      });
+      if (this.timeline)
+        seg.setCssProps({ "--preach-strip-weight": String(plan != null ? plan : 0) });
+      seg.addEventListener("click", () => {
+        const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+      });
+      this.segs.push(seg);
+    });
+  }
+  refresh() {
+    var _a, _b;
+    const first = this.headings[0];
+    const height = this.scrollEl.clientHeight;
+    if (!first || !first.isConnected || height === 0)
+      return;
+    const base = this.scrollEl.getBoundingClientRect().top;
+    const tops = this.headings.map((h) => h.getBoundingClientRect().top - base);
+    const line = Math.max(0.25 * height, 100);
+    const atBottom = this.scrollEl.scrollTop + height >= this.scrollEl.scrollHeight - 2;
+    const current = currentSectionIndex(tops, line, height, atBottom);
+    const result = this.timeline ? sectionPace(this.plans, current, this.elapsedSeconds()) : null;
+    const key = [
+      current,
+      (_a = result == null ? void 0 : result.pace) != null ? _a : "",
+      (_b = result == null ? void 0 : result.planned) != null ? _b : "",
+      result ? Math.round(result.fraction * 200) : ""
+    ].join("|");
+    if (key === this.lastKey)
+      return;
+    this.lastKey = key;
+    this.segs.forEach((seg, i) => {
+      seg.classList.toggle("is-current", i === current);
+      if (i === current)
+        seg.setAttribute("aria-current", "location");
+      else
+        seg.removeAttribute("aria-current");
+    });
+    if (result == null ? void 0 : result.pace)
+      this.nav.dataset.pace = result.pace;
+    else
+      this.nav.removeAttribute("data-pace");
+    if (result) {
+      this.playhead.setCssProps({ "--preach-strip-at": String(result.fraction) });
+      this.segs[result.planned].appendChild(this.playhead);
+    } else {
+      this.playhead.remove();
+    }
+  }
+};
+
 // src/format.ts
 var FORMAT_BOLD = { open: "**", close: "**" };
 var FORMAT_ITALIC = { open: "*", close: "*" };
@@ -1738,6 +1967,7 @@ var PreachView = class extends import_obsidian3.ItemView {
     );
     this.formatManager = new FormatManager(this.app, this.file);
     this.buildUI();
+    this.registerInterval(window.setInterval(() => this.strip.refresh(), 1e3));
     this.preachFormatToolbar = new PreachFormatToolbar(
       this.formatManager,
       () => this.preachBodyEl,
@@ -1840,6 +2070,7 @@ var PreachView = class extends import_obsidian3.ItemView {
     this.scrollEl = root.createDiv({ cls: "preach-content" });
     this.scrollEl.addEventListener("scroll", () => {
       this.savedScrollTop = this.scrollEl.scrollTop;
+      this.strip.refresh();
       this.resetIdleTimer();
     });
     this.timerEl = root.createDiv({ cls: "preach-timer-corner" });
@@ -1908,6 +2139,7 @@ var PreachView = class extends import_obsidian3.ItemView {
       this.resetIdleTimer();
       this.handleExit();
     });
+    this.strip = new SectionStrip(root, this.scrollEl, () => this.timer.elapsedSeconds());
     this.scrollEl.addEventListener("pointerdown", () => {
       this.resetIdleTimer();
     });
@@ -2006,8 +2238,14 @@ var PreachView = class extends import_obsidian3.ItemView {
     this.scriptureExpander.updateSourcePath(file.path);
     this.scriptureExpander.processElement(body);
     this.tagRenderedHeadings(body, markdown);
+    const mode = this.plugin.settings.sectionStrip;
+    this.strip.build(
+      mode === "off" ? [] : sectionHeadingEls(body, this.plugin.settings.sectionHeadingLevel),
+      mode === "pacing"
+    );
     window.requestAnimationFrame(() => {
       this.scrollEl.scrollTop = scrollTop;
+      this.strip.refresh();
     });
   }
   /**
@@ -2039,9 +2277,7 @@ var PreachView = class extends import_obsidian3.ItemView {
       return;
     const panel = (_a = this.overlayEl.querySelector(".preach-outline-panel")) != null ? _a : this.overlayEl.createDiv({ cls: "preach-outline-panel" });
     panel.empty();
-    const level = this.plugin.settings.sectionHeadingLevel;
-    const tag = `h${level}`;
-    const headingEls = this.scrollEl.querySelectorAll(tag);
+    const headingEls = sectionHeadingEls(this.scrollEl, this.plugin.settings.sectionHeadingLevel);
     if (headingEls.length === 0) {
       panel.createEl("p", {
         cls: "preach-outline-empty",

@@ -53,6 +53,13 @@
 	--preach-timer-overtime-bg: rgba(160, 0, 0, 0.45);
 	--preach-timer-overtime-color: #ff2222;
 
+	/* Section strip */
+	--preach-strip-bar: rgba(255, 255, 255, 0.18);
+	--preach-strip-bar-awake: rgba(255, 255, 255, 0.35);
+	--preach-strip-current: rgba(255, 255, 255, 0.9);
+	--preach-strip-ahead: #7fb2e5;
+	--preach-strip-behind: var(--preach-timer-warn-color);
+
 	/* Outline overlay */
 	--preach-overlay-bg: rgba(0, 0, 0, 0.75);
 	--preach-panel-bg: #1a1a1a;
@@ -135,6 +142,7 @@
 	margin-top: 2rem;
 	margin-bottom: 0.5rem;
 	line-height: 1.3;
+	scroll-margin-top: calc(env(safe-area-inset-top, 0px) + 64px);
 }
 
 .preach-body h2 {
@@ -854,4 +862,109 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 	top: 50%;
 	left: 50%;
 	transform: translate(-50%, -50%);
+}
+
+/* ------------------------------------------------------------------ */
+/* Section strip                                                       */
+/* ------------------------------------------------------------------ */
+
+.preach-strip {
+	position: absolute;
+	top: calc(env(safe-area-inset-top, 0px) + 16px);
+	bottom: calc(env(safe-area-inset-bottom, 0px) + 72px);
+	right: 0;
+	width: 32px;
+	z-index: 20;
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
+	pointer-events: none;
+}
+
+.preach-strip--hidden {
+	display: none;
+}
+
+.preach-strip .preach-strip-seg {
+	position: relative;
+	display: block;
+	flex: 1 1 0px;
+	min-height: 0;
+	height: auto;
+	width: 100%;
+	margin: 0;
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	pointer-events: auto;
+	cursor: pointer;
+	touch-action: manipulation;
+	-webkit-tap-highlight-color: transparent;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.preach-strip .preach-strip-seg:hover,
+.preach-strip .preach-strip-seg:active {
+	background: transparent;
+	box-shadow: none;
+}
+
+.preach-strip--timeline .preach-strip-seg {
+	flex: var(--preach-strip-weight, 0) 1 0px;
+	min-height: 20px;
+}
+
+.preach-strip .preach-strip-seg::before {
+	content: "";
+	position: absolute;
+	top: 1.5px;
+	bottom: 1.5px;
+	right: 10px;
+	width: 3px;
+	border-radius: 2px;
+	background: var(--preach-strip-bar);
+	transition: background-color 200ms, width 200ms;
+}
+
+.preach-bottom-btns:not(.preach-bottom-btns--idle) ~ .preach-strip .preach-strip-seg:not(.is-current)::before {
+	background: var(--preach-strip-bar-awake);
+}
+
+.preach-strip .preach-strip-seg.is-current::before {
+	width: 6px;
+	background: var(--preach-strip-current);
+}
+
+.preach-strip[data-pace="ahead"] .preach-strip-seg.is-current::before {
+	background: var(--preach-strip-ahead);
+}
+
+.preach-strip[data-pace="behind"] .preach-strip-seg.is-current::before {
+	background: var(--preach-strip-behind);
+}
+
+.preach-bottom-btns--idle ~ .preach-strip .preach-strip-seg {
+	pointer-events: none;
+}
+
+.preach-strip-playhead {
+	position: absolute;
+	top: calc(var(--preach-strip-at, 0) * 100%);
+	right: 6px;
+	width: 14px;
+	height: 2px;
+	margin-top: -1px;
+	border-radius: 1px;
+	background: var(--preach-text);
+	box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+	pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.preach-strip .preach-strip-seg::before {
+		transition: none;
+	}
 }

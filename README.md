@@ -12,6 +12,8 @@ Inspired by the Preach function in Logos Bible Software.
 - **Large serif typography** - high contrast, generous line-height, tuned for live delivery
 - **Free vertical scroll** - scroll position remembered within the session
 - **Section outline** - tap the top-left button for a section list; tap any heading to jump there
+- **Section strip** - a thin strip on the right edge with one segment per section; the section you're reading is lit. Tap the screen to wake the controls, then tap a segment to jump there
+- **Section pacing (optional)** - end a section heading with a planned time like `(~5 min)`, and the strip shows whether you're on time, ahead or behind while the timer runs
 - **Exit confirmation** - two-step exit (tap once to see "Exit?", tap again to confirm)
 - **Edit round-trip** - bottom-right button switches to edit mode at the current position
 - **Live timer** - elapsed time with configurable amber and red thresholds
@@ -47,6 +49,7 @@ Alternatively, on iPad: Settings → Community plugins → Browse → search "Pr
 | Top-right | Exit | First tap shows "Exit?", second tap within 3s closes. |
 | Top-centre | Timer | Countdown from target duration. Single tap pauses/resumes. Double-tap resets. Counts up in red after reaching zero. |
 | Bottom-centre | A- / A+ | Steps the text size by 10% and remembers it for the next sermon. |
+| Right edge | Section strip | The lit segment is the section you're reading. When the controls have faded, tap the screen once, then tap a segment to jump. |
 | Bottom-right | Edit | Switches to edit mode at the current scroll position. |
 
 ### Scripture expansion
@@ -54,6 +57,19 @@ Alternatively, on iPad: Settings → Community plugins → Browse → search "Pr
 When preach mode is open, detected Bible references appear with a dotted underline. Tap a reference to expand the passage inline. The verse text is read from your vault Bible files (configurable in settings). Tap the expanded passage to collapse it.
 
 References in code blocks and callouts are intentionally skipped.
+
+### Section strip and pacing
+
+The strip on the right edge has one segment for each section heading (the same headings the outline lists, set by **Section heading level**). A section is lit once its heading reaches the upper quarter of the screen.
+
+Set **Section strip** to **Sections and pacing** to plan your timing. End a section heading with the minutes you plan to spend on it:
+
+    ## Intro (~3 min)
+    ## I. Circumcised in Him (v.11) (~5 min)
+
+The time must be the last thing in the heading, in brackets: `(~5 min)`, `(5 min)`, `(~5 mins)`, `(5 minutes)` and decimals like `(~1.5 min)` all work, up to 120 minutes. Ranges such as `(~3-4 min)` aren't read. Preach view hides each time it reads; if a time still shows, it wasn't read. Your note is never changed.
+
+With pacing on, each segment's length follows its planned time. Start the timer and a small tick shows where your plan says you should be. The lit segment turns amber when you're more than 30 seconds behind your plan for that section and blue when you're more than 30 seconds ahead. Sections without a time aren't judged. Pacing follows the times in your headings, not the timer's length.
 
 ---
 
@@ -63,6 +79,7 @@ References in code blocks and callouts are intentionally skipped.
 - **Amber warning** - timer turns amber at this many minutes remaining (default: 5)
 - **Red warning** - timer turns red at this many minutes remaining (default: 1)
 - **Section heading level** - heading level used for the outline (default: 2, i.e. `##`)
+- **Section strip** - Off, Sections (default), or Sections and pacing. Applies the next time you open preach mode.
 - **Text size** - sermon text scale in percent, 70 to 200 (default: 100). Also follows the iOS system text size.
 - **Bible folder path** - vault-relative path to your Bible chapter files (default: `30_Knowledge/Theology/Bible/CSB`). See [Bible vault format](#bible-vault-format) below for the expected folder structure.
 

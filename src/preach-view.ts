@@ -13,6 +13,7 @@ import type { TimerThresholds } from "./timer";
 import { noteTargetMinutes } from "./settings";
 import { HighlightManager, parseBlocks } from "./highlight";
 import { ScriptureExpander } from "./scripture";
+import { SectionStrip, sectionHeadingEls } from "./section-strip";
 import { FormatManager, PreachFormatToolbar } from "./format";
 
 export const PREACH_VIEW_TYPE = "preach-md-view";
@@ -70,6 +71,7 @@ export class PreachView extends ItemView {
 	private exitBtn!: HTMLElement;
 	private editBtn!: HTMLElement;
 	private bottomBtns!: HTMLElement;
+	private strip!: SectionStrip;
 	private overlayEl!: HTMLElement;
 	private exitChip!: HTMLElement;
 
@@ -163,6 +165,7 @@ export class PreachView extends ItemView {
 		this.formatManager = new FormatManager(this.app, this.file);
 
 		this.buildUI();
+		this.registerInterval(window.setInterval(() => this.strip.refresh(), 1000));
 
 		// Inline format toolbar restored in v0.6.6 with touch-gated listeners.
 		// See PreachFormatToolbar for the gating logic that prevents DOM
@@ -293,6 +296,7 @@ export class PreachView extends ItemView {
 		this.scrollEl = root.createDiv({ cls: "preach-content" });
 		this.scrollEl.addEventListener("scroll", () => {
 			this.savedScrollTop = this.scrollEl.scrollTop;
+			this.strip.refresh();
 			this.resetIdleTimer();
 		});
 
@@ -375,6 +379,9 @@ export class PreachView extends ItemView {
 			this.resetIdleTimer();
 			this.handleExit();
 		});
+
+		// Must come after bottomBtns: the idle CSS reaches it with a sibling selector
+		this.strip = new SectionStrip(root, this.scrollEl, () => this.timer.elapsedSeconds());
 
 		// Idle-fade: reset on any tap on the scroll area
 		this.scrollEl.addEventListener("pointerdown", () => {
@@ -503,9 +510,16 @@ export class PreachView extends ItemView {
 		// Tag headings so outline works
 		this.tagRenderedHeadings(body, markdown);
 
+		const mode = this.plugin.settings.sectionStrip;
+		this.strip.build(
+			mode === "off" ? [] : sectionHeadingEls(body, this.plugin.settings.sectionHeadingLevel),
+			mode === "pacing"
+		);
+
 		// Restore scroll position after render
 		window.requestAnimationFrame(() => {
 			this.scrollEl.scrollTop = scrollTop;
+			this.strip.refresh();
 		});
 	}
 
@@ -544,9 +558,7 @@ export class PreachView extends ItemView {
 			this.overlayEl.createDiv({ cls: "preach-outline-panel" });
 		panel.empty();
 
-		const level = this.plugin.settings.sectionHeadingLevel;
-		const tag = `h${level}`;
-		const headingEls = this.scrollEl.querySelectorAll<HTMLElement>(tag);
+		const headingEls = sectionHeadingEls(this.scrollEl, this.plugin.settings.sectionHeadingLevel);
 
 		if (headingEls.length === 0) {
 			panel.createEl("p", {
