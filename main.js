@@ -177,16 +177,22 @@ var HR_RE = /^(\*{3,}|-{3,}|_{3,})\s*$/;
 var FENCE_RE = /^```|^~~~/;
 var QUOTE_RE = /^>/;
 var LIST_RE = /^[-*+]\s|^\d+[.)]\s/;
+var LIST_INTERRUPT_RE = /^[-*+]\s+\S|^1[.)]\s/;
+var SETEXT_RE = /^-{3,}\s*$/;
 function startsNewBlock(line, blockLines) {
   const first = blockLines[0];
   if (HEADING_RE.test(blockLines[blockLines.length - 1]) || HR_RE.test(blockLines[blockLines.length - 1])) {
     return true;
   }
-  if (HEADING_RE.test(line) || HR_RE.test(line) || FENCE_RE.test(line))
+  if (HR_RE.test(line)) {
+    const isParagraph = !LIST_RE.test(first) && !QUOTE_RE.test(first);
+    return !(SETEXT_RE.test(line) && isParagraph);
+  }
+  if (HEADING_RE.test(line) || FENCE_RE.test(line))
     return true;
   if (QUOTE_RE.test(line) && !QUOTE_RE.test(first))
     return true;
-  if (LIST_RE.test(line) && !LIST_RE.test(first))
+  if (LIST_INTERRUPT_RE.test(line) && !LIST_RE.test(first))
     return true;
   return false;
 }

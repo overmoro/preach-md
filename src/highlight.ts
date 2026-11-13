@@ -24,6 +24,9 @@ const HR_RE = /^(\*{3,}|-{3,}|_{3,})\s*$/;
 const FENCE_RE = /^```|^~~~/;
 const QUOTE_RE = /^>/;
 const LIST_RE = /^[-*+]\s|^\d+[.)]\s/;
+// CommonMark: only a non-empty bullet or an ordered item numbered 1 can interrupt a paragraph.
+const LIST_INTERRUPT_RE = /^[-*+]\s+\S|^1[.)]\s/;
+const SETEXT_RE = /^-{3,}\s*$/;
 
 /** Whether `line` starts a new block when it follows `blockLines` with no blank line between. */
 function startsNewBlock(line: string, blockLines: string[]): boolean {
@@ -31,9 +34,14 @@ function startsNewBlock(line: string, blockLines: string[]): boolean {
 	if (HEADING_RE.test(blockLines[blockLines.length - 1]) || HR_RE.test(blockLines[blockLines.length - 1])) {
 		return true;
 	}
-	if (HEADING_RE.test(line) || HR_RE.test(line) || FENCE_RE.test(line)) return true;
+	if (HR_RE.test(line)) {
+		// "---" under a plain paragraph is a setext underline, not a break
+		const isParagraph = !LIST_RE.test(first) && !QUOTE_RE.test(first);
+		return !(SETEXT_RE.test(line) && isParagraph);
+	}
+	if (HEADING_RE.test(line) || FENCE_RE.test(line)) return true;
 	if (QUOTE_RE.test(line) && !QUOTE_RE.test(first)) return true;
-	if (LIST_RE.test(line) && !LIST_RE.test(first)) return true;
+	if (LIST_INTERRUPT_RE.test(line) && !LIST_RE.test(first)) return true;
 	return false;
 }
 

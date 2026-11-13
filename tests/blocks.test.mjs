@@ -16,12 +16,32 @@ test("heading straight into text", () => {
 	]);
 });
 
-test("text straight into a thematic break", () => {
+test("text then --- is a setext heading and stays one block", () => {
 	assert.deepEqual(shape("Some text\n---\nNext"), [
-		[0, 0, "Some text"],
-		[1, 1, "---"],
+		[0, 1, "Some text\n---"],
 		[2, 2, "Next"],
 	]);
+	assert.deepEqual(shape("Some text\n==="), [[0, 1, "Some text\n==="]]);
+});
+
+test("text straight into *** or ___ splits", () => {
+	assert.deepEqual(shape("Some text\n***\nNext"), [
+		[0, 0, "Some text"],
+		[1, 1, "***"],
+		[2, 2, "Next"],
+	]);
+	assert.equal(shape("Some text\n___").length, 2);
+});
+
+test("only 1. interrupts a paragraph, and a bare bullet does not", () => {
+	assert.deepEqual(shape("Text\n2026. x"), [[0, 1, "Text\n2026. x"]]);
+	assert.deepEqual(shape("Text\n1. x"), [
+		[0, 0, "Text"],
+		[1, 1, "1. x"],
+	]);
+	assert.deepEqual(shape("Text\n1) x"), [[0, 0, "Text"], [1, 1, "1) x"]]);
+	assert.equal(shape("Text\n-").length, 1);
+	assert.deepEqual(shape("- a\n2. b"), [[0, 1, "- a\n2. b"]]);
 });
 
 test("list straight into a heading", () => {
