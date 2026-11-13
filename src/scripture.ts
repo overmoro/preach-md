@@ -189,8 +189,6 @@ export interface ScriptureRef {
 	chapterEnd: number;
 	/** End verse (same as start for single verse), in chapterEnd. */
 	verseEnd: number;
-	/** True if the range ends in a later chapter. */
-	crossChapter: boolean;
 }
 
 /**
@@ -261,7 +259,6 @@ export function parseReferences(text: string): (ScriptureRef & { index: number; 
 			verseStart,
 			chapterEnd,
 			verseEnd,
-			crossChapter: chapterEnd !== chapter,
 			index: m.index + offset,
 			length: m[0].length - offset,
 		});
@@ -595,7 +592,6 @@ export async function fetchVerses(
 ): Promise<{ chapter: number; verse: number; text: string }[]> {
 	const notFound = () => new Error(`Passage not found: ${ref.raw}`);
 	if (ref.chapterEnd < ref.chapter) throw notFound();
-	if (ref.chapterEnd === ref.chapter && ref.verseEnd < ref.verseStart) throw notFound();
 
 	const results: { chapter: number; verse: number; text: string }[] = [];
 	for (let c = ref.chapter; c <= ref.chapterEnd; c++) {
@@ -603,8 +599,8 @@ export async function fetchVerses(
 		if (!map) throw notFound();
 
 		const first = c === ref.chapter ? ref.verseStart : 1;
-		if (!map.has(first)) throw notFound();
 		const last = c === ref.chapterEnd ? ref.verseEnd : Math.max(...map.keys());
+		if (last < first) throw notFound();
 		for (let v = first; v <= last; v++) {
 			const text = map.get(v);
 			if (text === undefined) throw notFound();
@@ -692,7 +688,6 @@ export class ScriptureExpander {
 					verseStart: ref.verseStart,
 					chapterEnd: ref.chapterEnd,
 					verseEnd: ref.verseEnd,
-					crossChapter: ref.crossChapter,
 				});
 
 				span.addEventListener("pointerdown", (e: PointerEvent) => {

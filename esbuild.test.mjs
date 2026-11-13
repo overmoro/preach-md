@@ -19,7 +19,8 @@ for (const name of ["scripture", "settings"]) {
     target: "es2020",
     logLevel: "warning",
     alias: {
-      obsidian: path.join(root, "tests/obsidian-stub.mjs"),
+      obsidian: "../obsidian-stub.mjs",
     },
+    external: ["../obsidian-stub.mjs"],
   });
 }

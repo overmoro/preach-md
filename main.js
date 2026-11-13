@@ -699,7 +699,6 @@ function parseReferences(text) {
       verseStart,
       chapterEnd,
       verseEnd,
-      crossChapter: chapterEnd !== chapter,
       index: m.index + offset,
       length: m[0].length - offset
     });
@@ -852,17 +851,15 @@ async function fetchVerses(app, csbFolder, ref) {
   const notFound = () => new Error(`Passage not found: ${ref.raw}`);
   if (ref.chapterEnd < ref.chapter)
     throw notFound();
-  if (ref.chapterEnd === ref.chapter && ref.verseEnd < ref.verseStart)
-    throw notFound();
   const results = [];
   for (let c = ref.chapter; c <= ref.chapterEnd; c++) {
     const map = await loadChapter(app, csbFolder, ref.book, c);
     if (!map)
       throw notFound();
     const first = c === ref.chapter ? ref.verseStart : 1;
-    if (!map.has(first))
-      throw notFound();
     const last = c === ref.chapterEnd ? ref.verseEnd : Math.max(...map.keys());
+    if (last < first)
+      throw notFound();
     for (let v = first; v <= last; v++) {
       const text = map.get(v);
       if (text === void 0)
@@ -924,8 +921,7 @@ var ScriptureExpander = class {
           chapter: ref.chapter,
           verseStart: ref.verseStart,
           chapterEnd: ref.chapterEnd,
-          verseEnd: ref.verseEnd,
-          crossChapter: ref.crossChapter
+          verseEnd: ref.verseEnd
         });
         span.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
