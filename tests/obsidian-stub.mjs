@@ -5,6 +5,7 @@ export class App {}
 export class Component {}
 export class TFile {}
 export const MarkdownRenderer = {};
+export const requireApiVersion = () => true;
 
 // Enough of the settings surface for the declarative definitions to be read.
 // display() is never called in tests, so Setting only needs to exist.

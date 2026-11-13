@@ -2,18 +2,86 @@
 // Provides bold, italic, underline, and highlight wrapping applied directly
 // to the source file from selected text in the preach view.
 
-import { App, TFile } from "obsidian";
-import type { Block } from "./highlight";
+import { App, Component, MarkdownRenderer, TFile, requireApiVersion } from "obsidian";
+import type { Block, Snapshot } from "./blocks";
 
 export interface FormatWrapper {
 	open: string;
 	close: string;
+	/** The element Obsidian renders this wrapper as. */
+	tag: string;
+	/** For `mark`: the expected data-highlight value, "" for a plain highlight. */
+	colour?: string;
 }
 
-export const FORMAT_BOLD: FormatWrapper = { open: "**", close: "**" };
-export const FORMAT_ITALIC: FormatWrapper = { open: "*", close: "*" };
-export const FORMAT_UNDERLINE: FormatWrapper = { open: "<u>", close: "</u>" };
-export const FORMAT_HIGHLIGHT: FormatWrapper = { open: "==", close: "==" };
+export const FORMAT_BOLD: FormatWrapper = { open: "**", close: "**", tag: "strong" };
+export const FORMAT_ITALIC: FormatWrapper = { open: "*", close: "*", tag: "em" };
+export const FORMAT_UNDERLINE: FormatWrapper = { open: "<u>", close: "</u>", tag: "u" };
+export const FORMAT_HIGHLIGHT: FormatWrapper = { open: "==", close: "==", tag: "mark", colour: "" };
+
+export const HIGHLIGHT_COLOURS: Record<string, string> = {
+	red: "\u{1F534}",
+	orange: "\u{1F7E0}",
+	yellow: "\u{1F7E1}",
+	green: "\u{1F7E2}",
+	blue: "\u{1F535}",
+	purple: "\u{1F7E3}",
+};
+
+const HIGHLIGHT_EMOJI = [
+	"\u{1F534}", "\u{1F7E5}", "\u{1F7E0}", "\u{1F7E7}", "\u{1F7E1}", "\u{1F7E8}",
+	"\u{1F7E2}", "\u{1F7E9}", "\u{1F535}", "\u{1F7E6}", "\u{1F7E3}", "\u{1F7EA}",
+];
+
+export function colourWrapper(colour: string): FormatWrapper {
+	return { open: "==" + HIGHLIGHT_COLOURS[colour], close: "==", tag: "mark", colour };
+}
+
+// ponytail: a word that occurs more than this many times in one block refuses to format; raise it if that bites, each candidate costs one render.
+const MAX_CANDIDATES = 12;
+
+/** Every edit that wraps one occurrence of `sel` in `src`, in source order. */
+export function wrapCandidates(src: string, sel: string, open: string, close: string): string[] {
+	const edits: string[] = [];
+	for (let i = src.indexOf(sel); i !== -1; i = src.indexOf(sel, i + 1)) {
+		edits.push(src.slice(0, i) + open + sel + close + src.slice(i + sel.length));
+		if (edits.length > MAX_CANDIDATES) return [];
+	}
+	return edits;
+}
+
+/**
+ * Every edit that recolours (`colour` a name or "") or unwraps (`colour` null)
+ * one highlight whose rendered text is `inner`, in source order.
+ */
+export function markCandidates(src: string, inner: string, colour: string | null): string[] {
+	const replacement =
+		colour === null ? inner.replace(/^\uFE0F/, "") : "==" + (HIGHLIGHT_COLOURS[colour] ?? "") + inner + "==";
+	const edits: string[] = [];
+	for (const emoji of ["", ...HIGHLIGHT_EMOJI]) {
+		const target = "==" + emoji + inner + "==";
+		for (let i = src.indexOf(target); i !== -1; i = src.indexOf(target, i + 1)) {
+			edits.push(src.slice(0, i) + replacement + src.slice(i + target.length));
+			if (edits.length > MAX_CANDIDATES) return [];
+		}
+	}
+	return edits;
+}
+
+const textOffset = (root: Node, node: Node, offset: number): number => {
+	const r = (root.ownerDocument ?? document).createRange();
+	r.setStart(root, 0);
+	r.setEnd(node, offset);
+	return r.toString().length;
+};
+
+const span = (root: Node, el: Element): [number, number] => {
+	const start = textOffset(root, el, 0);
+	return [start, start + (el.textContent ?? "").length];
+};
+
+const isTarget = (el: Element, w: FormatWrapper): boolean =>
+	w.tag !== "mark" || (el.getAttribute("data-highlight") ?? "") === (w.colour ?? "");
 
 /** Result returned by captureFromSelection. */
 export interface CaptureResult {
@@ -26,7 +94,9 @@ export type FormatFailReason =
 	| "scripture-expand"
 	| "cross-block"
 	| "not-found"
-	| "collision";
+	| "collision"
+	| "stale"
+	| "failed";
 
 /**
  * Text shown for each bail condition. A total record rather than a lookup with
@@ -34,19 +104,28 @@ export type FormatFailReason =
  * error, and no key can resolve through Object.prototype.
  */
 const FORMAT_FAIL_MESSAGE: Record<FormatFailReason, string> = {
-	"scripture-expand": "Can't format inside an expanded passage.",
+	"scripture-expand": "Close the open passage before formatting.",
 	"cross-block": "Can't format across two paragraphs.",
-	"not-found": "Can't find that text in the note source.",
+	"not-found": "Can't match that text to the note source.",
 	collision: "That text is already formatted.",
+	stale: "The note is updating. Try again in a moment.",
+	failed: "Couldn't apply that format. The note is unchanged.",
 };
 
 export class FormatManager {
 	private app: App;
 	private file: TFile | null;
-	private blocks: Block[] = [];
+	private snapshot: Snapshot | null = null;
 
 	// The selection captured on pointerdown (before focus changes clear it)
-	private capturedSelection: { text: string; blockIndex: number } | null = null;
+	private capturedSelection: {
+		snapshot: Snapshot;
+		block: Block;
+		text: string;
+		a: number;
+		b: number;
+		rect: DOMRect;
+	} | null = null;
 
 	// Reused notice element
 	private noticeEl: HTMLElement | null = null;
@@ -61,8 +140,8 @@ export class FormatManager {
 		this.file = file;
 	}
 
-	updateBlocks(blocks: Block[]): void {
-		this.blocks = blocks;
+	updateSnapshot(snapshot: Snapshot | null): void {
+		this.snapshot = snapshot;
 	}
 
 	/**
@@ -85,146 +164,147 @@ export class FormatManager {
 		const range = sel.getRangeAt(0);
 		if (!bodyEl.contains(range.commonAncestorContainer)) return null;
 
-		// Bail if selection is inside a scripture expansion
-		let node: Node | null = sel.anchorNode;
-		while (node) {
-			if (node.instanceOf(HTMLElement)) {
-				if (node.classList.contains("preach-scripture-expand")) {
-					this.showFormatFailNotice("scripture-expand", range.getBoundingClientRect());
-					return null;
-				}
-			}
-			node = node.parentNode;
-		}
-
-		// Walk anchor node up to find .preach-block
-		let blockEl: HTMLElement | null = null;
-		node = sel.anchorNode;
-		while (node) {
-			if (node.instanceOf(HTMLElement) && node.classList.contains("preach-block")) {
-				blockEl = node;
-				break;
-			}
-			node = node.parentNode;
-		}
-
-		if (!blockEl) return null;
-
-		// Check selection doesn't span multiple preach-blocks
-		let focusBlockEl: HTMLElement | null = null;
-		let fn: Node | null = sel.focusNode;
-		while (fn) {
-			if (fn.instanceOf(HTMLElement) && fn.classList.contains("preach-block")) {
-				focusBlockEl = fn;
-				break;
-			}
-			fn = fn.parentNode;
-		}
-		if (focusBlockEl !== blockEl) {
-			this.showFormatFailNotice("cross-block", range.getBoundingClientRect());
-			return null;
-		}
-
-		const blockIndex = parseInt(blockEl.dataset.blockIndex ?? "", 10);
-		if (isNaN(blockIndex)) return null;
-
-		const block = this.blocks[blockIndex];
-		if (!block) return null;
-
-		const sourceContent = block.content;
-
-		// Try to find selected text in source block
-		let sourceIdx = sourceContent.indexOf(selectedText);
-
-		if (sourceIdx === -1) {
-			// Fuzzy fallback: strip common markdown markers from source before searching.
-			const stripped = sourceContent.replace(/[*_~=<>/]/g, "");
-			const strippedIdx = stripped.indexOf(selectedText);
-			if (strippedIdx !== -1) {
-				// Map the stripped index back to source index
-				let srcPos = 0;
-				let strippedCount = 0;
-				while (srcPos < sourceContent.length && strippedCount < strippedIdx) {
-					if (!/[*_~=<>/]/.test(sourceContent[srcPos])) strippedCount++;
-					srcPos++;
-				}
-				sourceIdx = srcPos;
-			}
-		}
-
-		if (sourceIdx === -1) {
-			this.showFormatFailNotice("not-found", range.getBoundingClientRect());
-			return null;
-		}
-
-		// Collision check: is this position already inside an existing wrapper?
-		const before = sourceContent.slice(0, sourceIdx);
-		const after = sourceContent.slice(sourceIdx + selectedText.length);
-		const wrappers = ["**", "*", "==", "<u>"];
-		for (const w of wrappers) {
-			if (before.endsWith(w) && after.startsWith(w === "**" ? "**" : w === "*" ? "*" : w === "==" ? "==" : "</u>")) {
-				this.showFormatFailNotice("collision", range.getBoundingClientRect());
-				return null;
-			}
-		}
-
-		this.capturedSelection = { text: selectedText, blockIndex };
-
 		const rect = range.getBoundingClientRect();
+
+		const blockOf = (n: Node): HTMLElement | null => {
+			for (let c: Node | null = n; c; c = c.parentNode) {
+				if (c.instanceOf(HTMLElement) && c.classList.contains("preach-block")) return c;
+			}
+			return null;
+		};
+		const blockEl = blockOf(range.startContainer);
+		if (!blockEl) return null;
+		if (blockOf(range.endContainer) !== blockEl) {
+			this.showFormatFailNotice("cross-block", rect);
+			return null;
+		}
+
+		if (blockEl.querySelector(".preach-scripture-expand")) {
+			this.showFormatFailNotice("scripture-expand", rect);
+			return null;
+		}
+
+		const block = this.snapshot?.blocks[parseInt(blockEl.dataset.blockIndex ?? "", 10)];
+		if (!this.snapshot || !block) {
+			this.showFormatFailNotice("stale", rect);
+			return null;
+		}
+
+		const text = blockEl.textContent ?? "";
+		let a = textOffset(blockEl, range.startContainer, range.startOffset);
+		let b = textOffset(blockEl, range.endContainer, range.endOffset);
+		while (a < b && /\s/.test(text[a])) a++;
+		while (b > a && /\s/.test(text[b - 1])) b--;
+		if (a === b) return null;
+
+		this.capturedSelection = { snapshot: this.snapshot, block, text, a, b, rect };
 		return { rect };
 	}
 
 	/**
-	 * Apply a format wrapper around the previously captured selection.
-	 * Writes to the source file via vault.process().
+	 * Wrap the captured selection in `wrapper` and write it to the source file.
+	 * A candidate edit is written only if it is the single one that renders to
+	 * the original page with the wrapper's element around exactly the selection.
 	 */
 	async applyFormat(wrapper: FormatWrapper): Promise<void> {
-		if (!this.capturedSelection || !this.file) return;
+		const captured = this.capturedSelection;
+		this.capturedSelection = null;
+		if (!captured || !this.file) return;
+		const { snapshot, block, text, a, b, rect } = captured;
+		const file = this.file;
 
-		const { text: selectedText, blockIndex } = this.capturedSelection;
-		const block = this.blocks[blockIndex];
-		if (!block) return;
+		const src = snapshot.text.slice(block.start, block.end);
+		const sel = text.slice(a, b);
+		const component = new Component();
+		component.load();
+		let edit: string | null = null;
+		let reason: FormatFailReason = "not-found";
+		try {
+			const renderInto = async (md: string): Promise<HTMLElement> => {
+				const div = createDiv();
+				await MarkdownRenderer.render(this.app, md, div, file.path, component);
+				div.normalize();
+				return div;
+			};
 
-		const sourceContent = block.content;
+			const base = await renderInto(src);
+			if (base.textContent === text) {
+				const covering = (tag: string): Element[] =>
+					Array.from(base.querySelectorAll(tag)).filter((el) => {
+						const [s, e] = span(base, el);
+						return s <= a && e >= b;
+					});
+				const marks: Element[] = Array.from(base.querySelectorAll("mark"));
+				const hit = wrapper.tag === "mark" ? covering("mark") : [];
+				let candidates: string[] = [];
+				let accepts: (d: HTMLElement) => boolean = () => false;
 
-		let sourceIdx = sourceContent.indexOf(selectedText);
-
-		if (sourceIdx === -1) {
-			const stripped = sourceContent.replace(/[*_~=]/g, "");
-			const strippedIdx = stripped.indexOf(selectedText);
-			if (strippedIdx !== -1) {
-				let srcPos = 0;
-				let strippedCount = 0;
-				while (srcPos < sourceContent.length && strippedCount < strippedIdx) {
-					if (!/[*_~=]/.test(sourceContent[srcPos])) strippedCount++;
-					srcPos++;
+				if (hit.length > 1) {
+					// refuse
+				} else if (hit.length === 1) {
+					const k = marks.indexOf(hit[0]);
+					const cur = hit[0].getAttribute("data-highlight") ?? "";
+					const t = wrapper.colour ?? "";
+					const unwrap = t === cur;
+					candidates = markCandidates(src, hit[0].textContent ?? "", unwrap ? null : t);
+					accepts = (d) => {
+						if (unwrap) {
+							const expected = base.cloneNode(true) as HTMLElement;
+							const m = expected.querySelectorAll("mark")[k];
+							const first = m.firstChild;
+							if (first?.nodeType === 3 && first.nodeValue) first.nodeValue = first.nodeValue.replace(/^\uFE0F/, "");
+							m.replaceWith(...Array.from(m.childNodes));
+							expected.normalize();
+							return d.isEqualNode(expected);
+						}
+						const dm = d.querySelectorAll("mark");
+						if (dm.length !== marks.length || (dm[k].getAttribute("data-highlight") ?? "") !== t) return false;
+						if (cur === "" && !hit[0].hasAttribute("data-highlight")) dm[k].removeAttribute("data-highlight");
+						else dm[k].setAttribute("data-highlight", cur);
+						d.normalize();
+						return d.isEqualNode(base);
+					};
+				} else if (wrapper.tag !== "mark" && covering(wrapper.tag).length > 0) {
+					reason = "collision";
+				} else {
+					candidates = wrapCandidates(src, sel, wrapper.open, wrapper.close);
+					accepts = (d) => {
+						const hits = Array.from(d.querySelectorAll(wrapper.tag)).filter((el) => {
+							if (!isTarget(el, wrapper)) return false;
+							const [s, e] = span(d, el);
+							return s === a && e === b;
+						});
+						if (hits.length !== 1) return false;
+						hits[0].replaceWith(...Array.from(hits[0].childNodes));
+						d.normalize();
+						return d.isEqualNode(base);
+					};
 				}
-				sourceIdx = srcPos;
+
+				const landed: string[] = [];
+				for (const candidate of candidates) {
+					if (accepts(await renderInto(candidate))) landed.push(candidate);
+				}
+				if (landed.length === 1) edit = landed[0];
 			}
+		} finally {
+			component.unload();
 		}
 
-		if (sourceIdx === -1) {
-			// Same condition captureFromSelection reports, reached on the apply
-			// side instead. It used to warn to the console, so a format tap that
-			// could not be applied did nothing at all from the user's side.
-			this.showFormatFailNotice("not-found");
+		if (edit === null) {
+			this.showFormatFailNotice(reason, rect);
 			return;
 		}
 
-		const absoluteStart = block.startOffset + sourceIdx;
-		const absoluteEnd = absoluteStart + selectedText.length;
-
-		await this.app.vault.process(this.file, (data) => {
-			return (
-				data.slice(0, absoluteStart) +
-				wrapper.open +
-				data.slice(absoluteStart, absoluteEnd) +
-				wrapper.close +
-				data.slice(absoluteEnd)
-			);
+		let stale = false;
+		await this.app.vault.process(file, (data) => {
+			if (data !== snapshot.text) {
+				stale = true;
+				return data;
+			}
+			return data.slice(0, block.start) + edit + data.slice(block.end);
 		});
-
-		this.capturedSelection = null;
+		if (stale) this.showFormatFailNotice("stale", rect);
 	}
 
 	/**
@@ -313,7 +393,7 @@ export class FormatManager {
  * based on whether a valid selection exists inside .preach-body.
  *
  * bodyElGetter is called on each selection event so it always has
- * the current body element (which is replaced on every renderFile call).
+ * the current body element (which is replaced on every render).
  */
 export class PreachFormatToolbar {
 	private formatManager: FormatManager;
@@ -387,9 +467,10 @@ export class PreachFormatToolbar {
 			label: string,
 			title: string,
 			wrapper: FormatWrapper,
+			row: HTMLElement,
 			extraClass?: string
 		): void => {
-			const btn = bar.createEl("button", {
+			const btn = row.createEl("button", {
 				cls: "preach-inline-fmt-btn" + (extraClass ? " " + extraClass : ""),
 			});
 			btn.setAttribute("aria-label", title);
@@ -417,17 +498,31 @@ export class PreachFormatToolbar {
 					return;
 				}
 				// Apply asynchronously
-				void this.formatManager.applyFormat(wrapper).then(() => {
-					this.hide();
-					window.getSelection()?.removeAllRanges();
-				});
+				void this.formatManager
+					.applyFormat(wrapper)
+					.catch((err) => {
+						console.error("Preach MD: format failed", err);
+						this.formatManager.showFormatFailNotice("failed", result.rect);
+					})
+					.finally(() => {
+						this.hide();
+						window.getSelection()?.removeAllRanges();
+					});
 			});
 		};
 
-		makeBtn("B", "Bold", FORMAT_BOLD, "preach-inline-fmt-btn--bold");
-		makeBtn("I", "Italic", FORMAT_ITALIC, "preach-inline-fmt-btn--italic");
-		makeBtn("U", "Underline", FORMAT_UNDERLINE, "preach-inline-fmt-btn--underline");
-		makeBtn("H", "Highlight", FORMAT_HIGHLIGHT, "preach-inline-fmt-btn--highlight");
+		const row = bar.createDiv({ cls: "preach-inline-fmt-row" });
+		makeBtn("B", "Bold", FORMAT_BOLD, row, "preach-inline-fmt-btn--bold");
+		makeBtn("I", "Italic", FORMAT_ITALIC, row, "preach-inline-fmt-btn--italic");
+		makeBtn("U", "Underline", FORMAT_UNDERLINE, row, "preach-inline-fmt-btn--underline");
+		makeBtn("H", "Highlight", FORMAT_HIGHLIGHT, row, "preach-inline-fmt-btn--highlight");
+
+		if (requireApiVersion("1.14.4")) {
+			const colourRow = bar.createDiv({ cls: "preach-inline-fmt-row" });
+			for (const [name, emoji] of Object.entries(HIGHLIGHT_COLOURS)) {
+				makeBtn(emoji, `Highlight ${name}`, colourWrapper(name), colourRow, "preach-inline-fmt-btn--colour");
+			}
+		}
 
 		return bar;
 	}

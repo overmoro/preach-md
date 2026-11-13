@@ -28,7 +28,7 @@ __export(main_exports, {
   default: () => PreachMDPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/scripture.ts
 var import_obsidian = require("obsidian");
@@ -378,8 +378,24 @@ function normaliseBook(raw) {
     return null;
   return (_a = BOOK_MAP[key]) != null ? _a : null;
 }
-var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+)(?::(\d+))?)?/g;
-function parseReferences(text) {
+var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)(\.)?\s+(\d+):(\d+)(?:[-–](\d+)(?::(\d+))?)?/g;
+var CONTINUATION_REGEX = /[;,]\s?(\d{1,3}):(\d{1,3})(?:[-–](\d{1,3})(?::(\d{1,3}))?)?\b(?!\s?[ap]\.?m\b)/iy;
+var VERSE_ONLY_REGEX = /\bvv?(?:\.\s?|\s)?(\d{1,3})(?:[-–](\d{1,3}))?\b(?![:.]\d)/g;
+var CHAPTER_ONLY_REGEX = /^(.+?)\s+(\d{1,3})(?:\s?[-–]\s?(\d{1,3}))?$/;
+var DOTTED_EXCLUDED = ["is", "am", "mr"];
+function verseChapter(p, n) {
+  if (p.chapterEnd === p.chapter)
+    return p.chapter;
+  if (p.chapterEnd !== p.chapter + 1)
+    return null;
+  const inFirst = n >= p.verseStart;
+  const inLast = n <= p.verseEnd;
+  if (inFirst === inLast)
+    return null;
+  return inFirst ? p.chapter : p.chapterEnd;
+}
+function parseReferences(text, passages = []) {
+  var _a;
   const results = [];
   SCRIPTURE_REGEX.lastIndex = 0;
   let m;
@@ -399,10 +415,12 @@ function parseReferences(text) {
     }
     if (book === null)
       continue;
-    const chapter = parseInt(m[2], 10);
-    const verseStart = parseInt(m[3], 10);
-    const chapterEnd = m[5] ? parseInt(m[4], 10) : chapter;
-    const verseEnd = m[5] ? parseInt(m[5], 10) : m[4] ? parseInt(m[4], 10) : verseStart;
+    if (m[2] && DOTTED_EXCLUDED.includes(words[words.length - 1].toLowerCase()))
+      continue;
+    const chapter = parseInt(m[3], 10);
+    const verseStart = parseInt(m[4], 10);
+    const chapterEnd = m[6] ? parseInt(m[5], 10) : chapter;
+    const verseEnd = m[6] ? parseInt(m[6], 10) : m[5] ? parseInt(m[5], 10) : verseStart;
     results.push({
       raw: m[0].slice(offset),
       book,
@@ -413,8 +431,83 @@ function parseReferences(text) {
       index: m.index + offset,
       length: m[0].length - offset
     });
+    let pos = m.index + m[0].length;
+    for (; ; ) {
+      CONTINUATION_REGEX.lastIndex = pos;
+      const c = CONTINUATION_REGEX.exec(text);
+      if (c === null)
+        break;
+      const raw = c[0].slice(c[0].search(/\d/));
+      const cChapter = parseInt(c[1], 10);
+      const cStart = parseInt(c[2], 10);
+      results.push({
+        raw,
+        book,
+        chapter: cChapter,
+        verseStart: cStart,
+        chapterEnd: c[4] ? parseInt(c[3], 10) : cChapter,
+        verseEnd: c[4] ? parseInt(c[4], 10) : c[3] ? parseInt(c[3], 10) : cStart,
+        index: pos + c[0].length - raw.length,
+        length: raw.length
+      });
+      pos += c[0].length;
+    }
+    SCRIPTURE_REGEX.lastIndex = pos;
+  }
+  if (passages.length === 1) {
+    const passage = passages[0];
+    VERSE_ONLY_REGEX.lastIndex = 0;
+    while ((m = VERSE_ONLY_REGEX.exec(text)) !== null) {
+      const verseStart = parseInt(m[1], 10);
+      const chapter = verseChapter(passage, verseStart);
+      if (chapter === null)
+        continue;
+      const before = /((?:[123]\s?)?[A-Z][a-z]+)\.?\s*$/.exec(text.slice(0, m.index));
+      if (before && ((_a = normaliseBook(before[1])) != null ? _a : normaliseBook(`1 ${before[1]}`)))
+        continue;
+      const start = m.index;
+      const end = start + m[0].length;
+      if (results.some((r) => r.index < end && start < r.index + r.length))
+        continue;
+      results.push({
+        raw: m[0],
+        book: passage.book,
+        chapter,
+        verseStart,
+        chapterEnd: chapter,
+        verseEnd: m[2] ? parseInt(m[2], 10) : verseStart,
+        index: m.index,
+        length: m[0].length
+      });
+    }
+    results.sort((a, b) => a.index - b.index);
   }
   return results;
+}
+function notePassages(frontmatter) {
+  var _a;
+  if (typeof frontmatter !== "object" || frontmatter === null)
+    return [];
+  const value = frontmatter["passage"];
+  const entries = Array.isArray(value) ? value : [value];
+  const refs = [];
+  for (const entry of entries) {
+    if (typeof entry !== "string")
+      continue;
+    const text = ((_a = entry.replace(/^\s*\[\[|\]\]\s*$/g, "").split("|").pop()) != null ? _a : "").trim();
+    const found = parseReferences(text);
+    if (found.length > 0) {
+      refs.push(...found);
+      continue;
+    }
+    const m = CHAPTER_ONLY_REGEX.exec(text);
+    const book = m ? normaliseBook(m[1]) : null;
+    if (m === null || book === null)
+      continue;
+    const chapter = parseInt(m[2], 10);
+    refs.push({ raw: text, book, chapter, verseStart: 1, chapterEnd: m[3] ? parseInt(m[3], 10) : chapter, verseEnd: Infinity });
+  }
+  return refs;
 }
 var verseCache = /* @__PURE__ */ new Map();
 var SINGLE_CHAPTER = true;
@@ -635,18 +728,18 @@ async function readRange(ref, load) {
     const map = await load(c);
     if (!map)
       return null;
+    const max = Math.max(...map.keys());
     const first = c === ref.chapter ? ref.verseStart : 1;
-    const last = c === ref.chapterEnd ? ref.verseEnd : Math.max(...map.keys());
-    if (last < first)
+    const last = c === ref.chapterEnd && ref.verseEnd !== Infinity ? ref.verseEnd : max;
+    if (first < 1 || last < first || last > max)
       return null;
     for (let v = first; v <= last; v++) {
       const text = map.get(v);
-      if (text === void 0)
-        return null;
-      results.push({ chapter: c, verse: v, text });
+      if (text)
+        results.push({ chapter: c, verse: v, text });
     }
   }
-  return results;
+  return results.length > 0 ? results : null;
 }
 async function fetchVerses(app, csbFolder, ref) {
   var _a;
@@ -663,6 +756,7 @@ async function fetchVerses(app, csbFolder, ref) {
 }
 var ScriptureExpander = class {
   constructor(app, csbFolder, component, sourcePath) {
+    this.passages = [];
     /** Track which refs are currently expanded: span element -> expanded div. */
     this.expanded = /* @__PURE__ */ new Map();
     this.app = app;
@@ -675,6 +769,9 @@ var ScriptureExpander = class {
   }
   updateSourcePath(sourcePath) {
     this.sourcePath = sourcePath;
+  }
+  updatePassages(passages) {
+    this.passages = passages;
   }
   /**
    * Walk the rendered DOM, find text nodes outside special blocks,
@@ -694,7 +791,7 @@ var ScriptureExpander = class {
     }
     if (node.nodeType === Node.TEXT_NODE) {
       const text = (_a = node.textContent) != null ? _a : "";
-      const refs = parseReferences(text);
+      const refs = parseReferences(text, this.passages);
       if (refs.length === 0)
         return;
       const frag = createFragment();
@@ -703,11 +800,11 @@ var ScriptureExpander = class {
         if (ref.index > cursor) {
           frag.appendText(text.slice(cursor, ref.index));
         }
-        const span = frag.createSpan({
+        const span2 = frag.createSpan({
           cls: "preach-scripture-ref",
           text: ref.raw
         });
-        span.dataset.ref = JSON.stringify({
+        span2.dataset.ref = JSON.stringify({
           raw: ref.raw,
           book: ref.book,
           chapter: ref.chapter,
@@ -715,9 +812,9 @@ var ScriptureExpander = class {
           chapterEnd: ref.chapterEnd,
           verseEnd: ref.verseEnd
         });
-        span.addEventListener("pointerdown", (e) => {
+        span2.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
-          void this.handleTap(span, ref);
+          void this.handleTap(span2, ref);
         });
         cursor = ref.index + ref.length;
       }
@@ -732,12 +829,12 @@ var ScriptureExpander = class {
       this.walkNode(child);
     }
   }
-  async handleTap(span, ref) {
-    const existing = this.expanded.get(span);
+  async handleTap(span2, ref) {
+    const existing = this.expanded.get(span2);
     if (existing) {
       existing.remove();
-      this.expanded.delete(span);
-      span.classList.remove("preach-scripture-ref--open");
+      this.expanded.delete(span2);
+      span2.classList.remove("preach-scripture-ref--open");
       return;
     }
     this.expanded.forEach((el, s) => {
@@ -748,36 +845,19 @@ var ScriptureExpander = class {
     const expandEl = createSpan();
     expandEl.className = "preach-scripture-expand";
     expandEl.textContent = "Loading...";
-    span.insertAdjacentElement("afterend", expandEl);
-    this.expanded.set(span, expandEl);
-    span.classList.add("preach-scripture-ref--open");
+    span2.insertAdjacentElement("afterend", expandEl);
+    this.expanded.set(span2, expandEl);
+    span2.classList.add("preach-scripture-ref--open");
     try {
       const verses = await fetchVerses(this.app, this.csbFolder, ref);
       expandEl.empty();
       expandEl.className = "preach-scripture-expand";
-      const passageEl = expandEl.createSpan({ cls: "preach-scripture-passage" });
-      let prevChapter = ref.chapter;
-      for (const { chapter, verse, text } of verses) {
-        const label = chapter !== prevChapter ? `${chapter}:${verse}` : String(verse);
-        prevChapter = chapter;
-        passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: label });
-        const tmp = createDiv();
-        await import_obsidian.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
-        const nodes = Array.from(tmp.childNodes);
-        for (const node of nodes) {
-          if (node.instanceOf(HTMLElement) && node.tagName === "P") {
-            passageEl.append(...Array.from(node.childNodes));
-          } else {
-            passageEl.append(node);
-          }
-        }
-        passageEl.appendText(" ");
-      }
+      await this.renderVerses(expandEl, ref.chapter, verses);
       expandEl.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         expandEl.remove();
-        this.expanded.delete(span);
-        span.classList.remove("preach-scripture-ref--open");
+        this.expanded.delete(span2);
+        span2.classList.remove("preach-scripture-ref--open");
       });
     } catch (err) {
       expandEl.empty();
@@ -787,9 +867,46 @@ var ScriptureExpander = class {
       expandEl.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         expandEl.remove();
-        this.expanded.delete(span);
-        span.classList.remove("preach-scripture-ref--open");
+        this.expanded.delete(span2);
+        span2.classList.remove("preach-scripture-ref--open");
       });
+    }
+  }
+  /**
+   * Render verses as one flowing paragraph into el.
+   * Each verse gets an inline superscript number; no block breaks between verses.
+   */
+  async renderVerses(el, firstChapter, verses) {
+    const passageEl = el.createSpan({ cls: "preach-scripture-passage" });
+    let prevChapter = firstChapter;
+    for (const { chapter, verse, text } of verses) {
+      const label = chapter !== prevChapter ? `${chapter}:${verse}` : String(verse);
+      prevChapter = chapter;
+      passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: label });
+      const tmp = createDiv();
+      await import_obsidian.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
+      const nodes = Array.from(tmp.childNodes);
+      for (const node of nodes) {
+        if (node.instanceOf(HTMLElement) && node.tagName === "P") {
+          passageEl.append(...Array.from(node.childNodes));
+        } else {
+          passageEl.append(node);
+        }
+      }
+      passageEl.appendText(" ");
+    }
+  }
+  async renderPassage(el, passages) {
+    el.empty();
+    for (const ref of passages) {
+      el.createDiv({ cls: "preach-passage-ref", text: ref.raw });
+      const textEl = el.createDiv({ cls: "preach-passage-text" });
+      try {
+        await this.renderVerses(textEl, ref.chapter, await fetchVerses(this.app, this.csbFolder, ref));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : `Could not load ${ref.raw}`;
+        textEl.createSpan({ cls: "preach-scripture-error-text", text: msg });
+      }
     }
   }
   /** Collapse all expanded passages (call when view re-renders). */
@@ -800,7 +917,7 @@ var ScriptureExpander = class {
 };
 
 // src/preach-view.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian2 = require("obsidian");
@@ -1267,168 +1384,123 @@ var PreachTimer = class {
   }
 };
 
-// src/highlight.ts
-function parseBlocks(markdown) {
-  const blocks = [];
-  let bodyStart = 0;
-  if (markdown.startsWith("---")) {
-    const end = markdown.indexOf("\n---", 3);
-    if (end !== -1) {
-      bodyStart = end + 4;
-      if (markdown[bodyStart] === "\n")
-        bodyStart++;
-    }
+// src/blocks.ts
+var isEmpty = (s) => s.position.start.offset === s.position.end.offset;
+function sectionsFit(text, sections) {
+  const lineStart = [0];
+  for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) {
+    lineStart.push(i + 1);
   }
-  const body = markdown.slice(bodyStart);
-  let inCodeFence = false;
-  const lines = body.split("\n");
-  let i = 0;
-  let charOffset = bodyStart;
-  const frontmatterLineCount = markdown.slice(0, bodyStart).split("\n").length - 1;
-  let lineNumber = frontmatterLineCount;
-  while (i < lines.length) {
-    const line = lines[i];
-    if (/^```/.test(line) || /^~~~/.test(line)) {
-      inCodeFence = !inCodeFence;
-    }
-    if (inCodeFence || line.trim() === "") {
-      charOffset += line.length + 1;
-      i++;
-      lineNumber++;
+  const locFits = (loc) => {
+    const base = lineStart[loc.line];
+    if (base === void 0 || base + loc.col !== loc.offset)
+      return false;
+    const lineEnd = loc.line + 1 < lineStart.length ? lineStart[loc.line + 1] - 1 : text.length;
+    return loc.offset <= lineEnd;
+  };
+  let cursor = 0;
+  for (const s of sections) {
+    if (isEmpty(s))
       continue;
-    }
-    const blockStartOffset = charOffset;
-    const blockStartLine = lineNumber;
-    const blockLines = [];
-    let inFence = inCodeFence;
-    while (i < lines.length && lines[i].trim() !== "") {
-      if (/^```/.test(lines[i]) || /^~~~/.test(lines[i])) {
-        inFence = !inFence;
-      }
-      blockLines.push(lines[i]);
-      charOffset += lines[i].length + 1;
-      i++;
-      lineNumber++;
-    }
-    const blockText = blockLines.join("\n");
-    const blockEnd = charOffset;
-    const firstLine = blockLines[0];
-    const isHeading = /^#{1,6}\s/.test(firstLine);
-    const isHr = /^(\*{3,}|-{3,}|_{3,})\s*$/.test(firstLine);
-    const isCodeFenceBlock = /^```|^~~~/.test(firstLine);
-    const isBlockquote = /^>/.test(firstLine);
-    const isList = /^[-*+]\s|^\d+[.)]\s/.test(firstLine);
-    const isCallout = /^>\s*\[!/.test(firstLine);
-    const highlightable = !isHeading && !isHr && !isCodeFenceBlock && !isBlockquote && !isList && !isCallout && blockText.trim().length > 0;
-    blocks.push({
-      start: blockStartOffset,
-      end: blockEnd,
-      content: blockText,
-      highlightable,
-      startLine: blockStartLine,
-      startOffset: blockStartOffset
-    });
+    const { start, end } = s.position;
+    if (!locFits(start) || !locFits(end))
+      return false;
+    if (text.slice(cursor, start.offset).trim() !== "")
+      return false;
+    cursor = end.offset;
   }
-  return blocks;
+  return text.slice(cursor).trim() === "";
 }
-function toggleHighlight(content) {
-  const trimmed = content.trim();
-  if (trimmed.startsWith("==") && trimmed.endsWith("==") && trimmed.length > 4) {
-    return content.replace(/==/g, "");
-  }
-  const leadMatch = content.match(/^(\s*)/);
-  const trailMatch = content.match(/(\s*)$/);
-  const lead = leadMatch ? leadMatch[1] : "";
-  const trail = trailMatch ? trailMatch[1] : "";
-  const inner = content.slice(lead.length, content.length - trail.length);
-  return `${lead}==${inner}==${trail}`;
+function toBlocks(_text, sections) {
+  return sections.filter((s) => !isEmpty(s) && s.type !== "yaml" && s.type !== "comment").map((s) => ({
+    start: s.position.start.offset,
+    end: s.position.end.offset,
+    line: s.position.start.line
+  }));
 }
-var HighlightManager = class {
-  constructor(app, file, renderComponent) {
-    this.blocks = [];
-    this.active = false;
-    this.btn = null;
-    this.app = app;
-    this.file = file;
-    this.renderComponent = renderComponent;
-  }
-  /** Call once after the preach view is built to wire the button and content area. */
-  init(btn, scrollEl, bodyEl) {
-    this.btn = btn;
-    this.scrollEl = scrollEl;
-    this.bodyEl = bodyEl;
-    this.updateButtonState();
-  }
-  updateFile(file) {
-    this.file = file;
-  }
-  isActive() {
-    return this.active;
-  }
-  toggle() {
-    this.active = !this.active;
-    this.updateButtonState();
-  }
-  /**
-   * Called after the preach view renders a new file.
-   * Rebuilds block map and attaches tap listeners to block wrappers.
-   */
-  attachBlocks(blocks) {
-    this.blocks = blocks;
-  }
-  /**
-   * Handle a tap on a block element. If highlight mode is on and the block
-   * is highlightable, toggle ==...== in the source file and re-render the block.
-   */
-  async handleBlockTap(blockIndex) {
-    if (!this.active)
-      return;
-    const block = this.blocks[blockIndex];
-    if (!block || !block.highlightable || !this.file)
-      return;
-    const file = this.file;
-    const scrollTop = this.scrollEl.scrollTop;
-    await this.app.vault.process(file, (source) => {
-      const before = source.slice(0, block.start);
-      const content = source.slice(block.start, block.end);
-      const after = source.slice(block.end);
-      const toggled = toggleHighlight(content);
-      block.content = toggled.trim();
-      return before + toggled + after;
-    });
-    const updated = await this.app.vault.read(file);
-    this.blocks = parseBlocks(updated);
-    window.requestAnimationFrame(() => {
-      this.scrollEl.scrollTop = scrollTop;
-    });
-  }
-  updateButtonState() {
-    if (!this.btn)
-      return;
-    if (this.active) {
-      this.btn.classList.add("preach-highlight-btn--on");
-      this.btn.setAttribute("aria-pressed", "true");
-    } else {
-      this.btn.classList.remove("preach-highlight-btn--on");
-      this.btn.setAttribute("aria-pressed", "false");
-    }
-  }
-};
 
 // src/format.ts
-var FORMAT_BOLD = { open: "**", close: "**" };
-var FORMAT_ITALIC = { open: "*", close: "*" };
-var FORMAT_UNDERLINE = { open: "<u>", close: "</u>" };
-var FORMAT_HIGHLIGHT = { open: "==", close: "==" };
+var import_obsidian3 = require("obsidian");
+var FORMAT_BOLD = { open: "**", close: "**", tag: "strong" };
+var FORMAT_ITALIC = { open: "*", close: "*", tag: "em" };
+var FORMAT_UNDERLINE = { open: "<u>", close: "</u>", tag: "u" };
+var FORMAT_HIGHLIGHT = { open: "==", close: "==", tag: "mark", colour: "" };
+var HIGHLIGHT_COLOURS = {
+  red: "\u{1F534}",
+  orange: "\u{1F7E0}",
+  yellow: "\u{1F7E1}",
+  green: "\u{1F7E2}",
+  blue: "\u{1F535}",
+  purple: "\u{1F7E3}"
+};
+var HIGHLIGHT_EMOJI = [
+  "\u{1F534}",
+  "\u{1F7E5}",
+  "\u{1F7E0}",
+  "\u{1F7E7}",
+  "\u{1F7E1}",
+  "\u{1F7E8}",
+  "\u{1F7E2}",
+  "\u{1F7E9}",
+  "\u{1F535}",
+  "\u{1F7E6}",
+  "\u{1F7E3}",
+  "\u{1F7EA}"
+];
+function colourWrapper(colour) {
+  return { open: "==" + HIGHLIGHT_COLOURS[colour], close: "==", tag: "mark", colour };
+}
+var MAX_CANDIDATES = 12;
+function wrapCandidates(src, sel, open, close) {
+  const edits = [];
+  for (let i = src.indexOf(sel); i !== -1; i = src.indexOf(sel, i + 1)) {
+    edits.push(src.slice(0, i) + open + sel + close + src.slice(i + sel.length));
+    if (edits.length > MAX_CANDIDATES)
+      return [];
+  }
+  return edits;
+}
+function markCandidates(src, inner, colour) {
+  var _a;
+  const replacement = colour === null ? inner.replace(/^\uFE0F/, "") : "==" + ((_a = HIGHLIGHT_COLOURS[colour]) != null ? _a : "") + inner + "==";
+  const edits = [];
+  for (const emoji of ["", ...HIGHLIGHT_EMOJI]) {
+    const target = "==" + emoji + inner + "==";
+    for (let i = src.indexOf(target); i !== -1; i = src.indexOf(target, i + 1)) {
+      edits.push(src.slice(0, i) + replacement + src.slice(i + target.length));
+      if (edits.length > MAX_CANDIDATES)
+        return [];
+    }
+  }
+  return edits;
+}
+var textOffset = (root, node, offset) => {
+  var _a;
+  const r = ((_a = root.ownerDocument) != null ? _a : document).createRange();
+  r.setStart(root, 0);
+  r.setEnd(node, offset);
+  return r.toString().length;
+};
+var span = (root, el) => {
+  var _a;
+  const start = textOffset(root, el, 0);
+  return [start, start + ((_a = el.textContent) != null ? _a : "").length];
+};
+var isTarget = (el, w) => {
+  var _a, _b;
+  return w.tag !== "mark" || ((_a = el.getAttribute("data-highlight")) != null ? _a : "") === ((_b = w.colour) != null ? _b : "");
+};
 var FORMAT_FAIL_MESSAGE = {
-  "scripture-expand": "Can't format inside an expanded passage.",
+  "scripture-expand": "Close the open passage before formatting.",
   "cross-block": "Can't format across two paragraphs.",
-  "not-found": "Can't find that text in the note source.",
-  collision: "That text is already formatted."
+  "not-found": "Can't match that text to the note source.",
+  collision: "That text is already formatted.",
+  stale: "The note is updating. Try again in a moment.",
+  failed: "Couldn't apply that format. The note is unchanged."
 };
 var FormatManager = class {
   constructor(app, file) {
-    this.blocks = [];
+    this.snapshot = null;
     // The selection captured on pointerdown (before focus changes clear it)
     this.capturedSelection = null;
     // Reused notice element
@@ -1440,8 +1512,8 @@ var FormatManager = class {
   updateFile(file) {
     this.file = file;
   }
-  updateBlocks(blocks) {
-    this.blocks = blocks;
+  updateSnapshot(snapshot) {
+    this.snapshot = snapshot;
   }
   /**
    * Inspect the current window selection, validate it is inside the preach body,
@@ -1453,7 +1525,7 @@ var FormatManager = class {
    * and returns null.
    */
   captureFromSelection(bodyEl) {
-    var _a;
+    var _a, _b, _c;
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0)
       return null;
@@ -1463,116 +1535,150 @@ var FormatManager = class {
     const range = sel.getRangeAt(0);
     if (!bodyEl.contains(range.commonAncestorContainer))
       return null;
-    let node = sel.anchorNode;
-    while (node) {
-      if (node.instanceOf(HTMLElement)) {
-        if (node.classList.contains("preach-scripture-expand")) {
-          this.showFormatFailNotice("scripture-expand", range.getBoundingClientRect());
-          return null;
-        }
+    const rect = range.getBoundingClientRect();
+    const blockOf = (n) => {
+      for (let c = n; c; c = c.parentNode) {
+        if (c.instanceOf(HTMLElement) && c.classList.contains("preach-block"))
+          return c;
       }
-      node = node.parentNode;
-    }
-    let blockEl = null;
-    node = sel.anchorNode;
-    while (node) {
-      if (node.instanceOf(HTMLElement) && node.classList.contains("preach-block")) {
-        blockEl = node;
-        break;
-      }
-      node = node.parentNode;
-    }
+      return null;
+    };
+    const blockEl = blockOf(range.startContainer);
     if (!blockEl)
       return null;
-    let focusBlockEl = null;
-    let fn = sel.focusNode;
-    while (fn) {
-      if (fn.instanceOf(HTMLElement) && fn.classList.contains("preach-block")) {
-        focusBlockEl = fn;
-        break;
-      }
-      fn = fn.parentNode;
-    }
-    if (focusBlockEl !== blockEl) {
-      this.showFormatFailNotice("cross-block", range.getBoundingClientRect());
+    if (blockOf(range.endContainer) !== blockEl) {
+      this.showFormatFailNotice("cross-block", rect);
       return null;
     }
-    const blockIndex = parseInt((_a = blockEl.dataset.blockIndex) != null ? _a : "", 10);
-    if (isNaN(blockIndex))
-      return null;
-    const block = this.blocks[blockIndex];
-    if (!block)
-      return null;
-    const sourceContent = block.content;
-    let sourceIdx = sourceContent.indexOf(selectedText);
-    if (sourceIdx === -1) {
-      const stripped = sourceContent.replace(/[*_~=<>/]/g, "");
-      const strippedIdx = stripped.indexOf(selectedText);
-      if (strippedIdx !== -1) {
-        let srcPos = 0;
-        let strippedCount = 0;
-        while (srcPos < sourceContent.length && strippedCount < strippedIdx) {
-          if (!/[*_~=<>/]/.test(sourceContent[srcPos]))
-            strippedCount++;
-          srcPos++;
-        }
-        sourceIdx = srcPos;
-      }
-    }
-    if (sourceIdx === -1) {
-      this.showFormatFailNotice("not-found", range.getBoundingClientRect());
+    if (blockEl.querySelector(".preach-scripture-expand")) {
+      this.showFormatFailNotice("scripture-expand", rect);
       return null;
     }
-    const before = sourceContent.slice(0, sourceIdx);
-    const after = sourceContent.slice(sourceIdx + selectedText.length);
-    const wrappers = ["**", "*", "==", "<u>"];
-    for (const w of wrappers) {
-      if (before.endsWith(w) && after.startsWith(w === "**" ? "**" : w === "*" ? "*" : w === "==" ? "==" : "</u>")) {
-        this.showFormatFailNotice("collision", range.getBoundingClientRect());
-        return null;
-      }
+    const block = (_b = this.snapshot) == null ? void 0 : _b.blocks[parseInt((_a = blockEl.dataset.blockIndex) != null ? _a : "", 10)];
+    if (!this.snapshot || !block) {
+      this.showFormatFailNotice("stale", rect);
+      return null;
     }
-    this.capturedSelection = { text: selectedText, blockIndex };
-    const rect = range.getBoundingClientRect();
+    const text = (_c = blockEl.textContent) != null ? _c : "";
+    let a = textOffset(blockEl, range.startContainer, range.startOffset);
+    let b = textOffset(blockEl, range.endContainer, range.endOffset);
+    while (a < b && /\s/.test(text[a]))
+      a++;
+    while (b > a && /\s/.test(text[b - 1]))
+      b--;
+    if (a === b)
+      return null;
+    this.capturedSelection = { snapshot: this.snapshot, block, text, a, b, rect };
     return { rect };
   }
   /**
-   * Apply a format wrapper around the previously captured selection.
-   * Writes to the source file via vault.process().
+   * Wrap the captured selection in `wrapper` and write it to the source file.
+   * A candidate edit is written only if it is the single one that renders to
+   * the original page with the wrapper's element around exactly the selection.
    */
   async applyFormat(wrapper) {
-    if (!this.capturedSelection || !this.file)
-      return;
-    const { text: selectedText, blockIndex } = this.capturedSelection;
-    const block = this.blocks[blockIndex];
-    if (!block)
-      return;
-    const sourceContent = block.content;
-    let sourceIdx = sourceContent.indexOf(selectedText);
-    if (sourceIdx === -1) {
-      const stripped = sourceContent.replace(/[*_~=]/g, "");
-      const strippedIdx = stripped.indexOf(selectedText);
-      if (strippedIdx !== -1) {
-        let srcPos = 0;
-        let strippedCount = 0;
-        while (srcPos < sourceContent.length && strippedCount < strippedIdx) {
-          if (!/[*_~=]/.test(sourceContent[srcPos]))
-            strippedCount++;
-          srcPos++;
-        }
-        sourceIdx = srcPos;
-      }
-    }
-    if (sourceIdx === -1) {
-      this.showFormatFailNotice("not-found");
-      return;
-    }
-    const absoluteStart = block.startOffset + sourceIdx;
-    const absoluteEnd = absoluteStart + selectedText.length;
-    await this.app.vault.process(this.file, (data) => {
-      return data.slice(0, absoluteStart) + wrapper.open + data.slice(absoluteStart, absoluteEnd) + wrapper.close + data.slice(absoluteEnd);
-    });
+    var _a, _b, _c;
+    const captured = this.capturedSelection;
     this.capturedSelection = null;
+    if (!captured || !this.file)
+      return;
+    const { snapshot, block, text, a, b, rect } = captured;
+    const file = this.file;
+    const src = snapshot.text.slice(block.start, block.end);
+    const sel = text.slice(a, b);
+    const component = new import_obsidian3.Component();
+    component.load();
+    let edit = null;
+    let reason = "not-found";
+    try {
+      const renderInto = async (md) => {
+        const div = createDiv();
+        await import_obsidian3.MarkdownRenderer.render(this.app, md, div, file.path, component);
+        div.normalize();
+        return div;
+      };
+      const base = await renderInto(src);
+      if (base.textContent === text) {
+        const covering = (tag) => Array.from(base.querySelectorAll(tag)).filter((el) => {
+          const [s, e] = span(base, el);
+          return s <= a && e >= b;
+        });
+        const marks = Array.from(base.querySelectorAll("mark"));
+        const hit = wrapper.tag === "mark" ? covering("mark") : [];
+        let candidates = [];
+        let accepts = () => false;
+        if (hit.length > 1) {
+        } else if (hit.length === 1) {
+          const k = marks.indexOf(hit[0]);
+          const cur = (_a = hit[0].getAttribute("data-highlight")) != null ? _a : "";
+          const t = (_b = wrapper.colour) != null ? _b : "";
+          const unwrap = t === cur;
+          candidates = markCandidates(src, (_c = hit[0].textContent) != null ? _c : "", unwrap ? null : t);
+          accepts = (d) => {
+            var _a2;
+            if (unwrap) {
+              const expected = base.cloneNode(true);
+              const m = expected.querySelectorAll("mark")[k];
+              const first = m.firstChild;
+              if ((first == null ? void 0 : first.nodeType) === 3 && first.nodeValue)
+                first.nodeValue = first.nodeValue.replace(/^\uFE0F/, "");
+              m.replaceWith(...Array.from(m.childNodes));
+              expected.normalize();
+              return d.isEqualNode(expected);
+            }
+            const dm = d.querySelectorAll("mark");
+            if (dm.length !== marks.length || ((_a2 = dm[k].getAttribute("data-highlight")) != null ? _a2 : "") !== t)
+              return false;
+            if (cur === "" && !hit[0].hasAttribute("data-highlight"))
+              dm[k].removeAttribute("data-highlight");
+            else
+              dm[k].setAttribute("data-highlight", cur);
+            d.normalize();
+            return d.isEqualNode(base);
+          };
+        } else if (wrapper.tag !== "mark" && covering(wrapper.tag).length > 0) {
+          reason = "collision";
+        } else {
+          candidates = wrapCandidates(src, sel, wrapper.open, wrapper.close);
+          accepts = (d) => {
+            const hits = Array.from(d.querySelectorAll(wrapper.tag)).filter((el) => {
+              if (!isTarget(el, wrapper))
+                return false;
+              const [s, e] = span(d, el);
+              return s === a && e === b;
+            });
+            if (hits.length !== 1)
+              return false;
+            hits[0].replaceWith(...Array.from(hits[0].childNodes));
+            d.normalize();
+            return d.isEqualNode(base);
+          };
+        }
+        const landed = [];
+        for (const candidate of candidates) {
+          if (accepts(await renderInto(candidate)))
+            landed.push(candidate);
+        }
+        if (landed.length === 1)
+          edit = landed[0];
+      }
+    } finally {
+      component.unload();
+    }
+    if (edit === null) {
+      this.showFormatFailNotice(reason, rect);
+      return;
+    }
+    let stale = false;
+    await this.app.vault.process(file, (data) => {
+      if (data !== snapshot.text) {
+        stale = true;
+        return data;
+      }
+      return data.slice(0, block.start) + edit + data.slice(block.end);
+    });
+    if (stale)
+      this.showFormatFailNotice("stale", rect);
   }
   /**
    * Show a brief notice explaining why formatting could not be applied.
@@ -1682,8 +1788,8 @@ var PreachFormatToolbar = class {
   buildToolbar(parent) {
     const bar = parent.createDiv({ cls: "preach-inline-format-bar" });
     bar.setAttribute("aria-label", "Format selection");
-    const makeBtn = (label, title, wrapper, extraClass) => {
-      const btn = bar.createEl("button", {
+    const makeBtn = (label, title, wrapper, row2, extraClass) => {
+      const btn = row2.createEl("button", {
         cls: "preach-inline-fmt-btn" + (extraClass ? " " + extraClass : "")
       });
       btn.setAttribute("aria-label", title);
@@ -1706,17 +1812,27 @@ var PreachFormatToolbar = class {
           this.hide();
           return;
         }
-        void this.formatManager.applyFormat(wrapper).then(() => {
+        void this.formatManager.applyFormat(wrapper).catch((err) => {
+          console.error("Preach MD: format failed", err);
+          this.formatManager.showFormatFailNotice("failed", result.rect);
+        }).finally(() => {
           var _a;
           this.hide();
           (_a = window.getSelection()) == null ? void 0 : _a.removeAllRanges();
         });
       });
     };
-    makeBtn("B", "Bold", FORMAT_BOLD, "preach-inline-fmt-btn--bold");
-    makeBtn("I", "Italic", FORMAT_ITALIC, "preach-inline-fmt-btn--italic");
-    makeBtn("U", "Underline", FORMAT_UNDERLINE, "preach-inline-fmt-btn--underline");
-    makeBtn("H", "Highlight", FORMAT_HIGHLIGHT, "preach-inline-fmt-btn--highlight");
+    const row = bar.createDiv({ cls: "preach-inline-fmt-row" });
+    makeBtn("B", "Bold", FORMAT_BOLD, row, "preach-inline-fmt-btn--bold");
+    makeBtn("I", "Italic", FORMAT_ITALIC, row, "preach-inline-fmt-btn--italic");
+    makeBtn("U", "Underline", FORMAT_UNDERLINE, row, "preach-inline-fmt-btn--underline");
+    makeBtn("H", "Highlight", FORMAT_HIGHLIGHT, row, "preach-inline-fmt-btn--highlight");
+    if ((0, import_obsidian3.requireApiVersion)("1.14.4")) {
+      const colourRow = bar.createDiv({ cls: "preach-inline-fmt-row" });
+      for (const [name, emoji] of Object.entries(HIGHLIGHT_COLOURS)) {
+        makeBtn(emoji, `Highlight ${name}`, colourWrapper(name), colourRow, "preach-inline-fmt-btn--colour");
+      }
+    }
     return bar;
   }
   onSelectionChange() {
@@ -1805,7 +1921,7 @@ function extractHeadings(markdown, level) {
   }
   return results;
 }
-var PreachView = class extends import_obsidian3.ItemView {
+var PreachView = class extends import_obsidian4.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.file = null;
@@ -1815,6 +1931,8 @@ var PreachView = class extends import_obsidian3.ItemView {
     this.preachLeaf = null;
     this.editPills = /* @__PURE__ */ new Map();
     this.editFormatBars = /* @__PURE__ */ new Map();
+    this.passages = [];
+    this.passageBuilt = false;
     // Idle-fade timeout handle
     this.idleTimeout = null;
     // Wake lock
@@ -1825,10 +1943,11 @@ var PreachView = class extends import_obsidian3.ItemView {
     this.exitConfirming = false;
     this.exitConfirmTimeout = null;
     this.preachFormatToolbar = null;
-    // Current preach body element (replaced on each renderFile; toolbar queries via getter)
+    // Current preach body element (replaced on each render; toolbar queries via getter)
     this.preachBodyEl = null;
-    // Parsed blocks (kept in sync after each renderFile call)
-    this.blocks = [];
+    // Text and blocks of the last block render; null while showing the fallback
+    this.snapshot = null;
+    this.renderGen = 0;
     // View header (hidden while preach mode is active)
     this.viewHeaderEl = null;
     // Sidebar collapse state - tracked per open so restore is accurate
@@ -1860,13 +1979,8 @@ var PreachView = class extends import_obsidian3.ItemView {
       ws.leftSplit.collapse();
     if (this.rightSplitWasOpen)
       ws.rightSplit.collapse();
-    this.renderComponent = new import_obsidian3.Component();
+    this.renderComponent = new import_obsidian4.Component();
     this.renderComponent.load();
-    this.highlightManager = new HighlightManager(
-      this.app,
-      this.file,
-      this.renderComponent
-    );
     this.scriptureExpander = new ScriptureExpander(
       this.app,
       this.plugin.settings.csbFolderPath,
@@ -1887,23 +2001,19 @@ var PreachView = class extends import_obsidian3.ItemView {
     });
     await this.requestWakeLock();
     this.suppressEdgeSwipes();
+    this.registerEvent(
+      this.app.metadataCache.on("changed", (changed, data, cache) => {
+        var _a;
+        if (this.file && changed.path === this.file.path) {
+          this.timer.updateThresholds(this.timerThresholds());
+          const snapshot = { text: data, blocks: toBlocks(data, (_a = cache.sections) != null ? _a : []) };
+          void this.render(changed, data, snapshot, ++this.renderGen);
+        }
+      })
+    );
     if (this.file) {
       await this.renderFile(this.file);
     }
-    this.registerEvent(
-      this.app.vault.on("modify", (modified) => {
-        if (this.file && modified.path === this.file.path) {
-          void this.renderFile(this.file);
-        }
-      })
-    );
-    this.registerEvent(
-      this.app.metadataCache.on("changed", (changed) => {
-        if (this.file && changed.path === this.file.path) {
-          this.timer.updateThresholds(this.timerThresholds());
-        }
-      })
-    );
     this.preachLeaf = this.leaf;
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", (leaf) => {
@@ -1919,6 +2029,7 @@ var PreachView = class extends import_obsidian3.ItemView {
   }
   async onClose() {
     var _a, _b;
+    this.renderGen++;
     if (this.idleTimeout !== null) {
       window.clearTimeout(this.idleTimeout);
       this.idleTimeout = null;
@@ -1949,9 +2060,6 @@ var PreachView = class extends import_obsidian3.ItemView {
     this.file = file;
     if (this.timer)
       this.timer.updateThresholds(this.timerThresholds());
-    if (this.highlightManager) {
-      this.highlightManager.updateFile(file);
-    }
     if (this.formatManager) {
       this.formatManager.updateFile(file);
     }
@@ -1982,7 +2090,8 @@ var PreachView = class extends import_obsidian3.ItemView {
     this.timerEl = root.createDiv({ cls: "preach-timer-corner" });
     this.timer = new PreachTimer(this.timerEl, this.timerThresholds());
     this.bottomBtns = root.createDiv({ cls: "preach-bottom-btns" });
-    this.outlineBtn = this.bottomBtns.createEl("button", {
+    const leftGroup = this.bottomBtns.createDiv({ cls: "preach-bottom-left" });
+    this.outlineBtn = leftGroup.createEl("button", {
       cls: "preach-corner-btn preach-corner-btn--outline",
       attr: { "aria-label": "Outline", title: "Outline" }
     });
@@ -1996,6 +2105,21 @@ var PreachView = class extends import_obsidian3.ItemView {
       e.stopPropagation();
       this.resetIdleTimer();
       this.toggleOutline();
+    });
+    this.passageBtn = leftGroup.createEl("button", {
+      cls: "preach-corner-btn",
+      attr: { "aria-label": "Show passage", title: "Passage" }
+    });
+    const passageSvg = this.passageBtn.createSvg("svg", {
+      attr: { xmlns: "http://www.w3.org/2000/svg", width: "20", height: "20", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" }
+    });
+    passageSvg.createSvg("path", { attr: { d: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" } });
+    passageSvg.createSvg("path", { attr: { d: "M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" } });
+    this.passageBtn.toggle(false);
+    this.passageBtn.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      this.resetIdleTimer();
+      this.togglePassage();
     });
     const sizeGroup = this.bottomBtns.createDiv({ cls: "preach-bottom-size" });
     for (const [label, aria, step] of [["A-", "Smaller text", -TEXT_SCALE_STEP], ["A+", "Larger text", TEXT_SCALE_STEP]]) {
@@ -2048,7 +2172,12 @@ var PreachView = class extends import_obsidian3.ItemView {
     this.scrollEl.addEventListener("pointerdown", () => {
       this.resetIdleTimer();
     });
-    this.highlightManager.init(null, this.scrollEl, this.scrollEl);
+    this.passageEl = root.createDiv({
+      cls: "preach-passage-overlay preach-passage-overlay--hidden"
+    });
+    this.passageBodyEl = this.passageEl.createDiv({ cls: "preach-passage-body" });
+    this.passageEl.addEventListener("click", () => this.closePassage());
+    this.passageEl.addEventListener("scroll", () => this.resetIdleTimer());
     this.overlayEl = root.createDiv({
       cls: "preach-outline-overlay preach-outline-overlay--hidden"
     });
@@ -2095,54 +2224,62 @@ var PreachView = class extends import_obsidian3.ItemView {
       this.idleTimeout = null;
     }, 3e3);
   }
-  // Render the file into the scroll area using block-by-block rendering
+  // Open path: pair the file text with the metadata cache, or fall back to a whole-note render
   async renderFile(file) {
+    var _a;
+    const gen = ++this.renderGen;
+    const text = await this.app.vault.read(file);
+    if (gen !== this.renderGen)
+      return;
+    const cache = this.app.metadataCache.getFileCache(file);
+    const sections = (_a = cache == null ? void 0 : cache.sections) != null ? _a : [];
+    const snapshot = cache && sectionsFit(text, sections) ? { text, blocks: toBlocks(text, sections) } : null;
+    await this.render(file, text, snapshot, gen);
+  }
+  // Render into the scroll area, block by block when a consistent snapshot exists
+  async render(file, text, snapshot, gen) {
+    var _a;
     const scrollTop = this.savedScrollTop;
     this.scriptureExpander.collapseAll();
     this.scrollEl.empty();
-    const markdown = await this.app.vault.read(file);
-    const blocks = parseBlocks(markdown);
-    this.blocks = blocks;
-    this.highlightManager.attachBlocks(blocks);
     const body = this.scrollEl.createDiv({ cls: "preach-body" });
     this.preachBodyEl = body;
-    if (this.formatManager) {
-      this.formatManager.updateBlocks(blocks);
-    }
-    for (let i = 0; i < blocks.length; i++) {
-      const block = blocks[i];
-      const wrapper = body.createDiv({
-        cls: "preach-block",
-        attr: {
-          "data-block-index": String(i),
-          "data-highlightable": block.highlightable ? "true" : "false"
-        }
-      });
-      await import_obsidian3.MarkdownRenderer.render(
-        this.app,
-        block.content,
-        wrapper,
-        file.path,
-        this.renderComponent
-      );
-      if (block.highlightable) {
-        wrapper.addEventListener("pointerdown", (e) => {
-          const target = e.target;
-          if (target.closest(".preach-scripture-ref") || target.closest(".preach-scripture-expand")) {
-            return;
-          }
-          if (this.highlightManager.isActive()) {
-            e.stopPropagation();
-            void this.highlightManager.handleBlockTap(i).then(() => {
-              void this.renderFile(file);
-            });
-          }
+    this.snapshot = snapshot;
+    this.formatManager.updateSnapshot(snapshot);
+    if (snapshot) {
+      for (let i = 0; i < snapshot.blocks.length; i++) {
+        const block = snapshot.blocks[i];
+        const wrapper = body.createDiv({
+          cls: "preach-block",
+          attr: { "data-block-index": String(i) }
         });
+        await import_obsidian4.MarkdownRenderer.render(
+          this.app,
+          snapshot.text.slice(block.start, block.end),
+          wrapper,
+          file.path,
+          this.renderComponent
+        );
+        if (gen !== this.renderGen)
+          return;
       }
+    } else {
+      const wrapper = body.createDiv({ cls: "preach-block" });
+      await import_obsidian4.MarkdownRenderer.render(this.app, text, wrapper, file.path, this.renderComponent);
+      if (gen !== this.renderGen)
+        return;
     }
     this.scriptureExpander.updateSourcePath(file.path);
+    const passages = notePassages((_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter);
+    if (JSON.stringify(passages) !== JSON.stringify(this.passages)) {
+      this.closePassage();
+      this.passageBuilt = false;
+    }
+    this.passages = passages;
+    this.passageBtn.toggle(passages.length > 0);
+    this.scriptureExpander.updatePassages(passages);
     this.scriptureExpander.processElement(body);
-    this.tagRenderedHeadings(body, markdown);
+    this.tagRenderedHeadings(body, text);
     window.requestAnimationFrame(() => {
       this.scrollEl.scrollTop = scrollTop;
     });
@@ -2195,6 +2332,7 @@ var PreachView = class extends import_obsidian3.ItemView {
           e.stopPropagation();
           el.scrollIntoView({ behavior: "smooth", block: "start" });
           this.closeOutline();
+          this.closePassage();
         });
       });
     }
@@ -2202,6 +2340,22 @@ var PreachView = class extends import_obsidian3.ItemView {
   }
   closeOutline() {
     this.overlayEl.classList.add("preach-outline-overlay--hidden");
+  }
+  // Passage overlay controls
+  togglePassage() {
+    if (!this.passageEl.classList.contains("preach-passage-overlay--hidden")) {
+      this.closePassage();
+      return;
+    }
+    if (!this.passageBuilt) {
+      this.passageBuilt = true;
+      void this.scriptureExpander.renderPassage(this.passageBodyEl, this.passages);
+    }
+    this.passageEl.classList.remove("preach-passage-overlay--hidden");
+  }
+  closePassage() {
+    this.passageEl.classList.add("preach-passage-overlay--hidden");
+    this.resetIdleTimer();
   }
   // Exit two-step confirmation
   handleExit() {
@@ -2228,14 +2382,14 @@ var PreachView = class extends import_obsidian3.ItemView {
   }
   // Find the 0-indexed source line of the topmost visible preach block.
   getTopmostVisibleLine() {
-    var _a;
+    var _a, _b;
     const blockEls = this.scrollEl.querySelectorAll(".preach-block");
     for (const el of Array.from(blockEls)) {
       if (el.getBoundingClientRect().bottom > 0) {
         const idx = parseInt((_a = el.dataset.blockIndex) != null ? _a : "", 10);
-        if (!isNaN(idx) && this.blocks[idx] !== void 0) {
-          return this.blocks[idx].startLine;
-        }
+        const block = (_b = this.snapshot) == null ? void 0 : _b.blocks[idx];
+        if (block)
+          return block.line;
       }
     }
     return null;
@@ -2416,12 +2570,12 @@ var PreachView = class extends import_obsidian3.ItemView {
 };
 
 // src/main.ts
-var PreachMDPlugin = class extends import_obsidian4.Plugin {
+var PreachMDPlugin = class extends import_obsidian5.Plugin {
   async onload() {
     var _a;
     await this.loadSettings();
     const dir = (_a = this.manifest.dir) != null ? _a : `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
-    setBibleFile((0, import_obsidian4.normalizePath)(`${dir}/bsb.txt`));
+    setBibleFile((0, import_obsidian5.normalizePath)(`${dir}/bsb.txt`));
     this.registerView(
       PREACH_VIEW_TYPE,
       (leaf) => new PreachView(leaf, this)

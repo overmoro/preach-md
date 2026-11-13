@@ -297,6 +297,14 @@
 	pointer-events: all;
 }
 
+/* Left-side group: outline + passage buttons */
+.preach-bottom-left {
+	display: flex;
+	align-items: flex-end;
+	gap: 4px;
+	pointer-events: all;
+}
+
 /* Right-side group: edit button + exit wrap side by side */
 .preach-bottom-right {
 	display: flex;
@@ -407,10 +415,9 @@
 	--preach-mark-bg: var(--highlight-background-purple);
 }
 
-/* Tappable block in highlight-mode gets a subtle tap affordance */
-.preach-block[data-highlightable="true"] {
-	border-radius: 4px;
-	transition: background 0.1s;
+/* Fallback whole-note render */
+.preach-body pre.frontmatter {
+	display: none;
 }
 
 /* ------------------------------------------------------------------ */
@@ -499,6 +506,53 @@
 
 .preach-exit-chip--visible {
 	opacity: 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Passage overlay                                                      */
+/* ------------------------------------------------------------------ */
+
+.preach-passage-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 15;
+	background: var(--preach-bg);
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.preach-passage-overlay--hidden {
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.preach-passage-body {
+	max-width: var(--preach-max-width);
+	margin: 0 auto;
+	padding: var(--preach-content-padding);
+	font-family: var(--preach-font-family);
+	font-size: calc(var(--preach-font-size) * 1.15);
+	line-height: 1.9;
+	color: var(--preach-text);
+}
+
+.preach-passage-ref {
+	font-size: 0.55em;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--preach-muted);
+	margin: 0 0 0.6em;
+}
+
+.preach-passage-text {
+	margin-bottom: 2em;
+}
+
+.preach-passage-overlay .preach-scripture-verse-num {
+	color: var(--preach-muted);
+	font-size: 0.5em;
 }
 
 /* ------------------------------------------------------------------ */
@@ -732,7 +786,7 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 	position: fixed;
 	z-index: 200;
 	display: flex;
-	align-items: center;
+	flex-direction: column;
 	gap: 4px;
 	background: color-mix(in srgb, #1a1a1a 80%, transparent);
 	-webkit-backdrop-filter: blur(18px);
@@ -745,6 +799,18 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 	transform: translateY(4px);
 	transition: opacity 0.12s ease, transform 0.12s ease;
 	/* Hidden by default; JS adds --visible class */
+}
+
+.preach-inline-fmt-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.preach-inline-fmt-btn--colour {
+	min-width: 44px;
+	padding: 0;
+	font-size: 1.1rem;
 }
 
 .preach-inline-format-bar--visible {
