@@ -63,7 +63,7 @@ References in code blocks and callouts are intentionally skipped.
 - **Section heading level** - heading level used for the outline (default: 2, i.e. `##`)
 - **Bible folder path** - vault-relative path to your Bible chapter files (default: `30_Knowledge/Theology/Bible/CSB`). See [Bible vault format](#bible-vault-format) below for the expected folder structure.
 
-A note can set its own countdown with `preach-minutes: 35` in its frontmatter. It takes a whole number of minutes from 1 to 1440 (a number or a quoted number), and anything else falls back to **Target duration**. A change made after the timer has started (running or paused) applies on the next reset or open; before you start, it applies straight away.
+A note can set its own countdown with `preach-minutes: 35` in its frontmatter. It takes a whole number of minutes from 1 to 1440 (a number or a quoted number), and anything else falls back to **Target duration**. While the timer is idle a change applies straight away; once started (running or paused), it applies on the next reset.
 
 ---
 
