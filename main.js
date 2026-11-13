@@ -1758,6 +1758,8 @@ var PreachView = class extends import_obsidian3.ItemView {
   }
   async setFile(file) {
     this.file = file;
+    if (this.timer)
+      this.timer.updateThresholds(this.timerThresholds());
     if (this.highlightManager) {
       this.highlightManager.updateFile(file);
     }
@@ -1789,9 +1791,7 @@ var PreachView = class extends import_obsidian3.ItemView {
       this.resetIdleTimer();
     });
     this.timerEl = root.createDiv({ cls: "preach-timer-corner" });
-    this.timer = new PreachTimer(this.timerEl, {
-      ...this.timerThresholds()
-    });
+    this.timer = new PreachTimer(this.timerEl, this.timerThresholds());
     this.bottomBtns = root.createDiv({ cls: "preach-bottom-btns" });
     this.outlineBtn = this.bottomBtns.createEl("button", {
       cls: "preach-corner-btn preach-corner-btn--outline",
@@ -1876,7 +1876,6 @@ var PreachView = class extends import_obsidian3.ItemView {
     this.scrollEl.empty();
     const markdown = await this.app.vault.read(file);
     const blocks = parseBlocks(markdown);
-    this.timer.updateThresholds(this.timerThresholds());
     this.blocks = blocks;
     this.highlightManager.attachBlocks(blocks);
     const body = this.scrollEl.createDiv({ cls: "preach-body" });

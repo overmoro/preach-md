@@ -252,6 +252,7 @@ export class PreachView extends ItemView {
 
 	async setFile(file: TFile): Promise<void> {
 		this.file = file;
+		if (this.timer) this.timer.updateThresholds(this.timerThresholds());
 		if (this.highlightManager) {
 			this.highlightManager.updateFile(file);
 		}
@@ -290,9 +291,7 @@ export class PreachView extends ItemView {
 
 		// Timer - top-centre, always visible, persistent
 		this.timerEl = root.createDiv({ cls: "preach-timer-corner" });
-		this.timer = new PreachTimer(this.timerEl, {
-			...this.timerThresholds(),
-		});
+		this.timer = new PreachTimer(this.timerEl, this.timerThresholds());
 
 		// Bottom buttons container - three floating icon-only buttons, auto-fade
 		this.bottomBtns = root.createDiv({ cls: "preach-bottom-btns" });
@@ -398,7 +397,6 @@ export class PreachView extends ItemView {
 
 		const markdown = await this.app.vault.read(file);
 		const blocks = parseBlocks(markdown);
-		this.timer.updateThresholds(this.timerThresholds());
 
 		// Keep a reference for scroll-sync in goToEdit
 		this.blocks = blocks;
