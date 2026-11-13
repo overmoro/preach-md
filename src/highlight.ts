@@ -19,8 +19,28 @@ export interface Block {
 	startOffset: number;
 }
 
+const HEADING_RE = /^#{1,6}\s/;
+const HR_RE = /^(\*{3,}|-{3,}|_{3,})\s*$/;
+const FENCE_RE = /^```|^~~~/;
+const QUOTE_RE = /^>/;
+const LIST_RE = /^[-*+]\s|^\d+[.)]\s/;
+
+/** Whether `line` starts a new block when it follows `blockLines` with no blank line between. */
+function startsNewBlock(line: string, blockLines: string[]): boolean {
+	const first = blockLines[0];
+	if (HEADING_RE.test(blockLines[blockLines.length - 1]) || HR_RE.test(blockLines[blockLines.length - 1])) {
+		return true;
+	}
+	if (HEADING_RE.test(line) || HR_RE.test(line) || FENCE_RE.test(line)) return true;
+	if (QUOTE_RE.test(line) && !QUOTE_RE.test(first)) return true;
+	if (LIST_RE.test(line) && !LIST_RE.test(first)) return true;
+	return false;
+}
+
 /**
- * Parse markdown source into top-level blocks separated by blank lines.
+ * Parse markdown source into top-level blocks. Blocks are separated by blank
+ * lines, and also split where a heading, thematic break, code fence, quote or
+ * list item starts with no blank line before it.
  * Returns block metadata including source offsets for vault.process() writes.
  *
  * Non-highlightable blocks: YAML frontmatter, headings, code fences,
@@ -75,7 +95,8 @@ export function parseBlocks(markdown: string): Block[] {
 		let inFence: boolean = inCodeFence;
 
 		while (i < lines.length && lines[i].trim() !== "") {
-			if (/^```/.test(lines[i]) || /^~~~/.test(lines[i])) {
+			if (!inFence && blockLines.length > 0 && startsNewBlock(lines[i], blockLines)) break;
+			if (FENCE_RE.test(lines[i])) {
 				inFence = !inFence;
 			}
 			blockLines.push(lines[i]);
@@ -89,11 +110,11 @@ export function parseBlocks(markdown: string): Block[] {
 		const firstLine = blockLines[0];
 
 		// Determine if this block is a plain paragraph
-		const isHeading = /^#{1,6}\s/.test(firstLine);
-		const isHr = /^(\*{3,}|-{3,}|_{3,})\s*$/.test(firstLine);
-		const isCodeFenceBlock = /^```|^~~~/.test(firstLine);
-		const isBlockquote = /^>/.test(firstLine);
-		const isList = /^[-*+]\s|^\d+[.)]\s/.test(firstLine);
+		const isHeading = HEADING_RE.test(firstLine);
+		const isHr = HR_RE.test(firstLine);
+		const isCodeFenceBlock = FENCE_RE.test(firstLine);
+		const isBlockquote = QUOTE_RE.test(firstLine);
+		const isList = LIST_RE.test(firstLine);
 		const isCallout = /^>\s*\[!/.test(firstLine);
 
 		const highlightable =

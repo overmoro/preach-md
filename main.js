@@ -172,6 +172,24 @@ var PreachTimer = class {
 };
 
 // src/highlight.ts
+var HEADING_RE = /^#{1,6}\s/;
+var HR_RE = /^(\*{3,}|-{3,}|_{3,})\s*$/;
+var FENCE_RE = /^```|^~~~/;
+var QUOTE_RE = /^>/;
+var LIST_RE = /^[-*+]\s|^\d+[.)]\s/;
+function startsNewBlock(line, blockLines) {
+  const first = blockLines[0];
+  if (HEADING_RE.test(blockLines[blockLines.length - 1]) || HR_RE.test(blockLines[blockLines.length - 1])) {
+    return true;
+  }
+  if (HEADING_RE.test(line) || HR_RE.test(line) || FENCE_RE.test(line))
+    return true;
+  if (QUOTE_RE.test(line) && !QUOTE_RE.test(first))
+    return true;
+  if (LIST_RE.test(line) && !LIST_RE.test(first))
+    return true;
+  return false;
+}
 function parseBlocks(markdown) {
   const blocks = [];
   let bodyStart = 0;
@@ -206,7 +224,9 @@ function parseBlocks(markdown) {
     const blockLines = [];
     let inFence = inCodeFence;
     while (i < lines.length && lines[i].trim() !== "") {
-      if (/^```/.test(lines[i]) || /^~~~/.test(lines[i])) {
+      if (!inFence && blockLines.length > 0 && startsNewBlock(lines[i], blockLines))
+        break;
+      if (FENCE_RE.test(lines[i])) {
         inFence = !inFence;
       }
       blockLines.push(lines[i]);
@@ -217,11 +237,11 @@ function parseBlocks(markdown) {
     const blockText = blockLines.join("\n");
     const blockEnd = charOffset;
     const firstLine = blockLines[0];
-    const isHeading = /^#{1,6}\s/.test(firstLine);
-    const isHr = /^(\*{3,}|-{3,}|_{3,})\s*$/.test(firstLine);
-    const isCodeFenceBlock = /^```|^~~~/.test(firstLine);
-    const isBlockquote = /^>/.test(firstLine);
-    const isList = /^[-*+]\s|^\d+[.)]\s/.test(firstLine);
+    const isHeading = HEADING_RE.test(firstLine);
+    const isHr = HR_RE.test(firstLine);
+    const isCodeFenceBlock = FENCE_RE.test(firstLine);
+    const isBlockquote = QUOTE_RE.test(firstLine);
+    const isList = LIST_RE.test(firstLine);
     const isCallout = /^>\s*\[!/.test(firstLine);
     const highlightable = !isHeading && !isHr && !isCodeFenceBlock && !isBlockquote && !isList && !isCallout && blockText.trim().length > 0;
     blocks.push({
