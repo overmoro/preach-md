@@ -49,6 +49,10 @@ Alternatively, on iPad: Settings → Community plugins → Browse → search "Pr
 | Bottom-centre | A- / A+ | Steps the text size by 10% and remembers it for the next sermon. |
 | Bottom-right | Edit | Switches to edit mode at the current scroll position. |
 
+### Highlight colours
+
+In Obsidian 1.14.4 or later, a second row of six coloured circles appears under B, I, U and H. Select text and tap a colour to highlight it. Tap a different colour on a highlight to recolour the whole highlight, its own colour to remove it, or H to make it plain (H on a plain highlight removes it). Preach MD writes the change only when Obsidian's own rendering confirms it landed on exactly the text you selected, and says so otherwise. A highlight with bold or other markup inside it can't be changed from here.
+
 ### Scripture expansion
 
 When preach mode is open, detected Bible references appear with a dotted underline. Tap a reference to expand the passage inline. The verse text is read from your vault Bible files (configurable in settings). Tap the expanded passage to collapse it.

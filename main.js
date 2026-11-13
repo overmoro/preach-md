@@ -1171,6 +1171,31 @@ var FORMAT_BOLD = { open: "**", close: "**", tag: "strong" };
 var FORMAT_ITALIC = { open: "*", close: "*", tag: "em" };
 var FORMAT_UNDERLINE = { open: "<u>", close: "</u>", tag: "u" };
 var FORMAT_HIGHLIGHT = { open: "==", close: "==", tag: "mark", colour: "" };
+var HIGHLIGHT_COLOURS = {
+  red: "\u{1F534}",
+  orange: "\u{1F7E0}",
+  yellow: "\u{1F7E1}",
+  green: "\u{1F7E2}",
+  blue: "\u{1F535}",
+  purple: "\u{1F7E3}"
+};
+var HIGHLIGHT_EMOJI = [
+  "\u{1F534}",
+  "\u{1F7E5}",
+  "\u{1F7E0}",
+  "\u{1F7E7}",
+  "\u{1F7E1}",
+  "\u{1F7E8}",
+  "\u{1F7E2}",
+  "\u{1F7E9}",
+  "\u{1F535}",
+  "\u{1F7E6}",
+  "\u{1F7E3}",
+  "\u{1F7EA}"
+];
+function colourWrapper(colour) {
+  return { open: "==" + HIGHLIGHT_COLOURS[colour], close: "==", tag: "mark", colour };
+}
 var MAX_CANDIDATES = 12;
 function wrapCandidates(src, sel, open, close) {
   const edits = [];
@@ -1178,6 +1203,20 @@ function wrapCandidates(src, sel, open, close) {
     edits.push(src.slice(0, i) + open + sel + close + src.slice(i + sel.length));
     if (edits.length > MAX_CANDIDATES)
       return [];
+  }
+  return edits;
+}
+function markCandidates(src, inner, colour) {
+  var _a;
+  const replacement = colour === null ? inner.replace(/^\uFE0F/, "") : "==" + ((_a = HIGHLIGHT_COLOURS[colour]) != null ? _a : "") + inner + "==";
+  const edits = [];
+  for (const emoji of ["", ...HIGHLIGHT_EMOJI]) {
+    const target = "==" + emoji + inner + "==";
+    for (let i = src.indexOf(target); i !== -1; i = src.indexOf(target, i + 1)) {
+      edits.push(src.slice(0, i) + replacement + src.slice(i + target.length));
+      if (edits.length > MAX_CANDIDATES)
+        return [];
+    }
   }
   return edits;
 }
@@ -1202,7 +1241,8 @@ var FORMAT_FAIL_MESSAGE = {
   "cross-block": "Can't format across two paragraphs.",
   "not-found": "Can't match that text to the note source.",
   collision: "That text is already formatted.",
-  stale: "The note is updating. Try again in a moment."
+  stale: "The note is updating. Try again in a moment.",
+  failed: "Couldn't apply that format. The note is unchanged."
 };
 var FormatManager = class {
   constructor(app, file) {
@@ -1283,6 +1323,7 @@ var FormatManager = class {
    * the original page with the wrapper's element around exactly the selection.
    */
   async applyFormat(wrapper) {
+    var _a, _b, _c;
     const captured = this.capturedSelection;
     this.capturedSelection = null;
     if (!captured || !this.file)
@@ -1304,16 +1345,48 @@ var FormatManager = class {
       };
       const base = await renderInto(src);
       if (base.textContent === text) {
-        const covered = Array.from(base.querySelectorAll(wrapper.tag)).some((el) => {
+        const covering = (tag) => Array.from(base.querySelectorAll(tag)).filter((el) => {
           const [s, e] = span(base, el);
           return s <= a && e >= b;
         });
-        if (covered) {
+        const marks = Array.from(base.querySelectorAll("mark"));
+        const hit = wrapper.tag === "mark" ? covering("mark") : [];
+        let candidates = [];
+        let accepts = () => false;
+        if (hit.length > 1) {
+        } else if (hit.length === 1) {
+          const k = marks.indexOf(hit[0]);
+          const cur = (_a = hit[0].getAttribute("data-highlight")) != null ? _a : "";
+          const t = (_b = wrapper.colour) != null ? _b : "";
+          const unwrap = t === cur;
+          candidates = markCandidates(src, (_c = hit[0].textContent) != null ? _c : "", unwrap ? null : t);
+          accepts = (d) => {
+            var _a2;
+            if (unwrap) {
+              const expected = base.cloneNode(true);
+              const m = expected.querySelectorAll("mark")[k];
+              const first = m.firstChild;
+              if ((first == null ? void 0 : first.nodeType) === 3 && first.nodeValue)
+                first.nodeValue = first.nodeValue.replace(/^\uFE0F/, "");
+              m.replaceWith(...Array.from(m.childNodes));
+              expected.normalize();
+              return d.isEqualNode(expected);
+            }
+            const dm = d.querySelectorAll("mark");
+            if (dm.length !== marks.length || ((_a2 = dm[k].getAttribute("data-highlight")) != null ? _a2 : "") !== t)
+              return false;
+            if (cur === "" && !hit[0].hasAttribute("data-highlight"))
+              dm[k].removeAttribute("data-highlight");
+            else
+              dm[k].setAttribute("data-highlight", cur);
+            d.normalize();
+            return d.isEqualNode(base);
+          };
+        } else if (wrapper.tag !== "mark" && covering(wrapper.tag).length > 0) {
           reason = "collision";
         } else {
-          const landed = [];
-          for (const candidate of wrapCandidates(src, sel, wrapper.open, wrapper.close)) {
-            const d = await renderInto(candidate);
+          candidates = wrapCandidates(src, sel, wrapper.open, wrapper.close);
+          accepts = (d) => {
             const hits = Array.from(d.querySelectorAll(wrapper.tag)).filter((el) => {
               if (!isTarget(el, wrapper))
                 return false;
@@ -1321,15 +1394,19 @@ var FormatManager = class {
               return s === a && e === b;
             });
             if (hits.length !== 1)
-              continue;
+              return false;
             hits[0].replaceWith(...Array.from(hits[0].childNodes));
             d.normalize();
-            if (d.isEqualNode(base))
-              landed.push(candidate);
-          }
-          if (landed.length === 1)
-            edit = landed[0];
+            return d.isEqualNode(base);
+          };
         }
+        const landed = [];
+        for (const candidate of candidates) {
+          if (accepts(await renderInto(candidate)))
+            landed.push(candidate);
+        }
+        if (landed.length === 1)
+          edit = landed[0];
       }
     } finally {
       component.unload();
@@ -1457,8 +1534,8 @@ var PreachFormatToolbar = class {
   buildToolbar(parent) {
     const bar = parent.createDiv({ cls: "preach-inline-format-bar" });
     bar.setAttribute("aria-label", "Format selection");
-    const makeBtn = (label, title, wrapper, extraClass) => {
-      const btn = bar.createEl("button", {
+    const makeBtn = (label, title, wrapper, row2, extraClass) => {
+      const btn = row2.createEl("button", {
         cls: "preach-inline-fmt-btn" + (extraClass ? " " + extraClass : "")
       });
       btn.setAttribute("aria-label", title);
@@ -1481,17 +1558,27 @@ var PreachFormatToolbar = class {
           this.hide();
           return;
         }
-        void this.formatManager.applyFormat(wrapper).catch((err) => console.error("Preach MD: format failed", err)).finally(() => {
+        void this.formatManager.applyFormat(wrapper).catch((err) => {
+          console.error("Preach MD: format failed", err);
+          this.formatManager.showFormatFailNotice("failed", result.rect);
+        }).finally(() => {
           var _a;
           this.hide();
           (_a = window.getSelection()) == null ? void 0 : _a.removeAllRanges();
         });
       });
     };
-    makeBtn("B", "Bold", FORMAT_BOLD, "preach-inline-fmt-btn--bold");
-    makeBtn("I", "Italic", FORMAT_ITALIC, "preach-inline-fmt-btn--italic");
-    makeBtn("U", "Underline", FORMAT_UNDERLINE, "preach-inline-fmt-btn--underline");
-    makeBtn("H", "Highlight", FORMAT_HIGHLIGHT, "preach-inline-fmt-btn--highlight");
+    const row = bar.createDiv({ cls: "preach-inline-fmt-row" });
+    makeBtn("B", "Bold", FORMAT_BOLD, row, "preach-inline-fmt-btn--bold");
+    makeBtn("I", "Italic", FORMAT_ITALIC, row, "preach-inline-fmt-btn--italic");
+    makeBtn("U", "Underline", FORMAT_UNDERLINE, row, "preach-inline-fmt-btn--underline");
+    makeBtn("H", "Highlight", FORMAT_HIGHLIGHT, row, "preach-inline-fmt-btn--highlight");
+    if ((0, import_obsidian3.requireApiVersion)("1.14.4")) {
+      const colourRow = bar.createDiv({ cls: "preach-inline-fmt-row" });
+      for (const [name, emoji] of Object.entries(HIGHLIGHT_COLOURS)) {
+        makeBtn(emoji, `Highlight ${name}`, colourWrapper(name), colourRow, "preach-inline-fmt-btn--colour");
+      }
+    }
     return bar;
   }
   onSelectionChange() {
