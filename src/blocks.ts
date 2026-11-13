@@ -14,7 +14,7 @@ export interface Snapshot {
 const isEmpty = (s: SectionCache): boolean =>
 	s.position.start.offset === s.position.end.offset;
 
-/** True when the sections describe exactly this text. */
+/** True when the sections' positions line up with this text. */
 export function sectionsFit(text: string, sections: SectionCache[]): boolean {
 	const lineStart = [0];
 	for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) {
