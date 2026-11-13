@@ -184,7 +184,8 @@ export class PreachView extends ItemView {
 		});
 		await this.requestWakeLock();
 		if (this.closed) return;
-		this.suppressEdgeSwipes();
+		// Obsidian's swipe detector skips marked elements: no sidebar, pull-down or back swipes here
+		this.containerEl.dataset.ignoreSwipe = "true";
 
 		// Registered before the first render so a re-index during it isn't missed
 		this.registerEvent(
@@ -842,23 +843,5 @@ export class PreachView extends ItemView {
 		} catch {
 			// Ignore release errors
 		}
-	}
-
-	// Block Obsidian Mobile's sidebar edge-swipe while preaching. Bubble phase on
-	// the view, so Settings and other modals (under body) keep their own swipe.
-	private suppressEdgeSwipes(): void {
-		this.registerDomEvent(
-			this.containerEl,
-			"touchstart",
-			(e: TouchEvent) => {
-				if (e.touches.length === 1) {
-					const x = e.touches[0].clientX;
-					if (x < 30 || x > window.innerWidth - 30) {
-						e.stopPropagation();
-					}
-				}
-			},
-			{ passive: true }
-		);
 	}
 }
