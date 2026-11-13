@@ -1481,7 +1481,7 @@ var PreachFormatToolbar = class {
           this.hide();
           return;
         }
-        void this.formatManager.applyFormat(wrapper).then(() => {
+        void this.formatManager.applyFormat(wrapper).catch((err) => console.error("Preach MD: format failed", err)).finally(() => {
           var _a;
           this.hide();
           (_a = window.getSelection()) == null ? void 0 : _a.removeAllRanges();

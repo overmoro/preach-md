@@ -10,6 +10,10 @@ test("wrapCandidates proposes one edit per exact occurrence, in source order", (
 	]);
 });
 
+test("wrapCandidates keeps open and close distinct", () => {
+	assert.deepEqual(wrapCandidates("a b", "b", "<u>", "</u>"), ["a <u>b</u>"]);
+});
+
 test("wrapCandidates proposes nothing for text that is not a literal substring", () => {
 	assert.deepEqual(wrapCandidates("**grace** alone", "grace alone", "**", "**"), []);
 });

@@ -424,10 +424,13 @@ export class PreachFormatToolbar {
 					return;
 				}
 				// Apply asynchronously
-				void this.formatManager.applyFormat(wrapper).then(() => {
-					this.hide();
-					window.getSelection()?.removeAllRanges();
-				});
+				void this.formatManager
+					.applyFormat(wrapper)
+					.catch((err) => console.error("Preach MD: format failed", err))
+					.finally(() => {
+						this.hide();
+						window.getSelection()?.removeAllRanges();
+					});
 			});
 		};
 
