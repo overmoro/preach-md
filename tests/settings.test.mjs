@@ -120,6 +120,7 @@ test("valid stored settings are kept", () => {
 		warnMinutes: 10,
 		critMinutes: 2,
 		sectionHeadingLevel: 3,
+		sectionStrip: "pacing",
 		csbFolderPath: "  Bible/CSB  ",
 	});
 	assert.deepEqual(out, {
@@ -127,6 +128,7 @@ test("valid stored settings are kept", () => {
 		warnMinutes: 10,
 		critMinutes: 2,
 		sectionHeadingLevel: 3,
+		sectionStrip: "pacing",
 		csbFolderPath: "Bible/CSB",
 	});
 });
@@ -197,4 +199,26 @@ test("noteTargetMinutes falls back to the setting when absent or invalid", () =>
 	for (const bad of [0, -5, 1441, 12.5, "abc", "", "  ", "12.5", null, true, [35], NaN]) {
 		assert.equal(noteTargetMinutes({ "preach-minutes": bad }, 25), 25, String(bad));
 	}
+});
+
+test("sectionStrip keeps its three modes and drops everything else", () => {
+	for (const ok of ["off", "sections", "pacing"]) {
+		assert.equal(parseStoredSettings({ sectionStrip: ok }).sectionStrip, ok);
+	}
+	for (const bad of ["on", true, 1, null, "", "Pacing", "__proto__"]) {
+		assert.equal(parseStoredSettings({ sectionStrip: bad }).sectionStrip, undefined, `${String(bad)} should be dropped`);
+	}
+	assert.equal(DEFAULT_SETTINGS.sectionStrip, "sections");
+});
+
+test("setControlValue accepts only the three sectionStrip modes", async () => {
+	const { tab, plugin, saves } = makeTab();
+	await tab.setControlValue("sectionStrip", "pacing");
+	assert.equal(plugin.settings.sectionStrip, "pacing");
+	assert.equal(saves.length, 1);
+	for (const bad of ["on", 2, undefined]) {
+		await tab.setControlValue("sectionStrip", bad);
+		assert.equal(plugin.settings.sectionStrip, "pacing");
+	}
+	assert.equal(saves.length, 1, "rejected values should not save");
 });
