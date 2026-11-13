@@ -7,6 +7,7 @@ import {
 	Component,
 } from "obsidian";
 import type PreachMDPlugin from "./main";
+import { MAX_TEXT_SCALE, MIN_TEXT_SCALE, TEXT_SCALE_STEP } from "./settings";
 import { PreachTimer } from "./timer";
 import type { TimerThresholds } from "./timer";
 import { noteTargetMinutes } from "./settings";
@@ -319,6 +320,22 @@ export class PreachView extends ItemView {
 			this.toggleOutline();
 		});
 
+		// Text size: A- / A+ in the bottom centre
+		const sizeGroup = this.bottomBtns.createDiv({ cls: "preach-bottom-size" });
+		for (const [label, aria, step] of [["A-", "Smaller text", -TEXT_SCALE_STEP], ["A+", "Larger text", TEXT_SCALE_STEP]] as const) {
+			const btn = sizeGroup.createEl("button", {
+				cls: "preach-corner-btn preach-size-btn",
+				text: label,
+				attr: { "aria-label": aria, title: aria },
+			});
+			btn.addEventListener("pointerdown", (e: PointerEvent) => {
+				e.stopPropagation();
+				this.resetIdleTimer();
+				this.stepTextScale(step);
+			});
+		}
+		this.applyTextScale();
+
 		// Right-side group: edit + exit
 		const rightGroup = this.bottomBtns.createDiv({ cls: "preach-bottom-right" });
 
@@ -379,6 +396,33 @@ export class PreachView extends ItemView {
 
 		// Start idle timer immediately
 		this.resetIdleTimer();
+	}
+
+	private applyTextScale(): void {
+		this.containerEl.setCssProps({
+			"--preach-text-scale": String(this.plugin.settings.textScalePercent / 100),
+		});
+	}
+
+	// Step the scale, keeping the topmost visible block where it was on screen.
+	private stepTextScale(step: number): void {
+		const settings = this.plugin.settings;
+		const next = Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, settings.textScalePercent + step));
+		if (next === settings.textScalePercent) return;
+
+		const top = this.scrollEl.getBoundingClientRect().top;
+		const anchor = Array.from(this.scrollEl.querySelectorAll<HTMLElement>(".preach-block"))
+			.find((el) => el.getBoundingClientRect().bottom > top);
+		const r0 = anchor?.getBoundingClientRect();
+		const fraction = r0 && r0.height > 0 ? (top - r0.top) / r0.height : 0;
+
+		settings.textScalePercent = next;
+		this.applyTextScale();
+		if (anchor) {
+			const r1 = anchor.getBoundingClientRect();
+			this.scrollEl.scrollTop += r1.top + fraction * r1.height - top;
+		}
+		void this.plugin.saveSettings();
 	}
 
 	// Idle-fade: show bottom buttons, then fade after 3 seconds of no interaction.
