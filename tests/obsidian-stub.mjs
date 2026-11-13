@@ -5,6 +5,7 @@ export class App {}
 export class Component {}
 export class TFile {}
 export const MarkdownRenderer = {};
+export const requireApiVersion = () => true;
 
 // Enough of the settings surface for the declarative definitions to be read.
 // display() is never called in tests, so Setting only needs to exist.
@@ -22,3 +23,9 @@ export class Setting {
 	setHeading() { return this; }
 	addText() { return this; }
 }
+
+export class Notice {}
+
+// Tests swap net.requestUrl to stand in for the network.
+export const net = { requestUrl: async () => { throw new Error("no network in tests"); } };
+export function requestUrl(req) { return net.requestUrl(req); }

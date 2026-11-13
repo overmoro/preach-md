@@ -9,7 +9,7 @@ import { fileURLToPath } from "url";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
-for (const name of ["scripture", "settings", "section-strip"]) {
+for (const name of ["scripture", "settings", "blocks", "format", "section-strip"]) {
   await esbuild.build({
     entryPoints: [path.join(root, `src/${name}.ts`)],
     outfile: path.join(root, `tests/.build/${name}.mjs`),
