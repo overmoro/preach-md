@@ -185,10 +185,10 @@ export interface ScriptureRef {
 	chapter: number;
 	/** Start verse. */
 	verseStart: number;
-	/** End verse (same as start for single verse). */
+	/** End chapter (same as chapter unless the range crosses chapters). */
+	chapterEnd: number;
+	/** End verse (same as start for single verse), in chapterEnd. */
 	verseEnd: number;
-	/** True if this spans chapters (not supported in v0.3.0). */
-	crossChapter: boolean;
 }
 
 /**
@@ -197,13 +197,15 @@ export interface ScriptureRef {
  *   group 1: book name (possibly "1 Cor", "Matthew", etc.)
  *   group 2: chapter
  *   group 3: start verse
- *   group 4: (optional) end verse after hyphen
+ *   group 4: (optional) end verse after hyphen, or end chapter if group 5 follows
+ *   group 5: (optional) end verse of a cross-chapter range, "John 3:16-4:2"
  *
  * Handles:
  *   - Numbered books: "1 Cor", "1Cor", "2 John"
  *   - Full names: "Matthew", "John", "Romans"
  *   - Names joined by "of": "Song of Solomon", "Song of Songs"
  *   - Verse ranges: "John 3:16-18"
+ *   - Cross-chapter ranges: "John 3:16-4:2", "Gen 1:1-3:5"
  *   - No verse (chapter only): not supported for now
  *
  * The optional "of" matters: without it the book name could only be one or two
@@ -213,7 +215,7 @@ export interface ScriptureRef {
  * unreachable from real sermon text.
  */
 const SCRIPTURE_REGEX =
-	/\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?/g;
+	/\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+)(?::(\d+))?)?/g;
 
 export function parseReferences(text: string): (ScriptureRef & { index: number; length: number })[] {
 	const results: (ScriptureRef & { index: number; length: number })[] = [];
@@ -245,7 +247,8 @@ export function parseReferences(text: string): (ScriptureRef & { index: number; 
 
 		const chapter = parseInt(m[2], 10);
 		const verseStart = parseInt(m[3], 10);
-		const verseEnd = m[4] ? parseInt(m[4], 10) : verseStart;
+		const chapterEnd = m[5] ? parseInt(m[4], 10) : chapter;
+		const verseEnd = m[5] ? parseInt(m[5], 10) : m[4] ? parseInt(m[4], 10) : verseStart;
 
 		// Trim any absorbed prefix off the match, so the highlighted span covers
 		// the reference itself and not the word before it.
@@ -254,8 +257,8 @@ export function parseReferences(text: string): (ScriptureRef & { index: number; 
 			book,
 			chapter,
 			verseStart,
+			chapterEnd,
 			verseEnd,
-			crossChapter: false,
 			index: m.index + offset,
 			length: m[0].length - offset,
 		});
@@ -576,38 +579,38 @@ async function loadChapter(
 }
 
 /**
- * Fetch verse text for a reference. Returns an array of { verse, text } pairs.
+ * Fetch verse text for a reference. Returns an array of { chapter, verse, text }
+ * entries, in reading order. A cross-chapter range runs from the start verse to
+ * the end of the first chapter, through any whole chapters between, then from
+ * verse 1 to the end verse of the last chapter.
  * Throws a user-readable string on error.
  */
 export async function fetchVerses(
 	app: App,
 	csbFolder: string,
 	ref: ScriptureRef
-): Promise<{ verse: number; text: string }[]> {
-	if (ref.crossChapter) {
-		throw new Error("Cross-chapter ranges not supported yet.");
-	}
+): Promise<{ chapter: number; verse: number; text: string }[]> {
+	const notFound = () => new Error(`Passage not found: ${ref.raw}`);
+	if (ref.chapterEnd < ref.chapter) throw notFound();
 
-	const map = await loadChapter(app, csbFolder, ref.book, ref.chapter);
-	if (!map) {
-		throw new Error(`Passage not found: ${ref.raw}`);
-	}
+	const results: { chapter: number; verse: number; text: string }[] = [];
+	for (let c = ref.chapter; c <= ref.chapterEnd; c++) {
+		const map = await loadChapter(app, csbFolder, ref.book, c);
+		if (!map) throw notFound();
 
-	const results: { verse: number; text: string }[] = [];
-	for (let v = ref.verseStart; v <= ref.verseEnd; v++) {
-		const text = map.get(v);
-		if (text === undefined) {
-			throw new Error(`Passage not found: ${ref.raw}`);
+		const first = c === ref.chapter ? ref.verseStart : 1;
+		const last = c === ref.chapterEnd ? ref.verseEnd : Math.max(...map.keys());
+		if (last < first) throw notFound();
+		for (let v = first; v <= last; v++) {
+			const text = map.get(v);
+			if (text === undefined) throw notFound();
+			results.push({ chapter: c, verse: v, text });
 		}
-		results.push({ verse: v, text });
 	}
 
 	return results;
 }
 
-// ---------------------------------------------------------------------------
-// ScriptureExpander - DOM wiring
-// ---------------------------------------------------------------------------
 
 export class ScriptureExpander {
 	private app: App;
@@ -683,8 +686,8 @@ export class ScriptureExpander {
 					book: ref.book,
 					chapter: ref.chapter,
 					verseStart: ref.verseStart,
+					chapterEnd: ref.chapterEnd,
 					verseEnd: ref.verseEnd,
-					crossChapter: ref.crossChapter,
 				});
 
 				span.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -745,9 +748,12 @@ export class ScriptureExpander {
 			// Each verse gets an inline superscript number; no block breaks between verses.
 			const passageEl = expandEl.createSpan({ cls: "preach-scripture-passage" });
 
-			for (const { verse, text } of verses) {
-				// Superscript verse number
-				passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: String(verse) });
+			let prevChapter = ref.chapter;
+			for (const { chapter, verse, text } of verses) {
+				// Superscript verse number; "C:V" where the chapter changes
+				const label = chapter !== prevChapter ? `${chapter}:${verse}` : String(verse);
+				prevChapter = chapter;
+				passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: label });
 
 				// Render verse text into a temp container, then lift child nodes inline.
 				// MarkdownRenderer wraps plain text in <p>; unwrap to keep flow continuous.

@@ -899,7 +899,7 @@ function normaliseBook(raw) {
     return null;
   return (_a = BOOK_MAP[key]) != null ? _a : null;
 }
-var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?/g;
+var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+)(?::(\d+))?)?/g;
 function parseReferences(text) {
   const results = [];
   SCRIPTURE_REGEX.lastIndex = 0;
@@ -922,14 +922,15 @@ function parseReferences(text) {
       continue;
     const chapter = parseInt(m[2], 10);
     const verseStart = parseInt(m[3], 10);
-    const verseEnd = m[4] ? parseInt(m[4], 10) : verseStart;
+    const chapterEnd = m[5] ? parseInt(m[4], 10) : chapter;
+    const verseEnd = m[5] ? parseInt(m[5], 10) : m[4] ? parseInt(m[4], 10) : verseStart;
     results.push({
       raw: m[0].slice(offset),
       book,
       chapter,
       verseStart,
+      chapterEnd,
       verseEnd,
-      crossChapter: false,
       index: m.index + offset,
       length: m[0].length - offset
     });
@@ -1079,20 +1080,24 @@ async function loadChapter(app, csbFolder, book, chapter) {
   return null;
 }
 async function fetchVerses(app, csbFolder, ref) {
-  if (ref.crossChapter) {
-    throw new Error("Cross-chapter ranges not supported yet.");
-  }
-  const map = await loadChapter(app, csbFolder, ref.book, ref.chapter);
-  if (!map) {
-    throw new Error(`Passage not found: ${ref.raw}`);
-  }
+  const notFound = () => new Error(`Passage not found: ${ref.raw}`);
+  if (ref.chapterEnd < ref.chapter)
+    throw notFound();
   const results = [];
-  for (let v = ref.verseStart; v <= ref.verseEnd; v++) {
-    const text = map.get(v);
-    if (text === void 0) {
-      throw new Error(`Passage not found: ${ref.raw}`);
+  for (let c = ref.chapter; c <= ref.chapterEnd; c++) {
+    const map = await loadChapter(app, csbFolder, ref.book, c);
+    if (!map)
+      throw notFound();
+    const first = c === ref.chapter ? ref.verseStart : 1;
+    const last = c === ref.chapterEnd ? ref.verseEnd : Math.max(...map.keys());
+    if (last < first)
+      throw notFound();
+    for (let v = first; v <= last; v++) {
+      const text = map.get(v);
+      if (text === void 0)
+        throw notFound();
+      results.push({ chapter: c, verse: v, text });
     }
-    results.push({ verse: v, text });
   }
   return results;
 }
@@ -1147,8 +1152,8 @@ var ScriptureExpander = class {
           book: ref.book,
           chapter: ref.chapter,
           verseStart: ref.verseStart,
-          verseEnd: ref.verseEnd,
-          crossChapter: ref.crossChapter
+          chapterEnd: ref.chapterEnd,
+          verseEnd: ref.verseEnd
         });
         span.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
@@ -1191,8 +1196,11 @@ var ScriptureExpander = class {
       expandEl.empty();
       expandEl.className = "preach-scripture-expand";
       const passageEl = expandEl.createSpan({ cls: "preach-scripture-passage" });
-      for (const { verse, text } of verses) {
-        passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: String(verse) });
+      let prevChapter = ref.chapter;
+      for (const { chapter, verse, text } of verses) {
+        const label = chapter !== prevChapter ? `${chapter}:${verse}` : String(verse);
+        prevChapter = chapter;
+        passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: label });
         const tmp = createDiv();
         await import_obsidian2.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
         const nodes = Array.from(tmp.childNodes);

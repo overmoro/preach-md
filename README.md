@@ -17,7 +17,7 @@ Inspired by the Preach function in Logos Bible Software.
 - **Live timer** - elapsed time with configurable amber and red thresholds
 - **Screen wake lock** - keeps the display on while preach mode is active
 - **Edge-swipe suppression** - prevents accidental sidebar openings
-- **Scripture tap-to-expand** - Bible references (e.g. `John 3:16`, `Rom 8:28-30`) are detected automatically; tap one to expand the passage inline from your vault Bible files; tap again to collapse
+- **Scripture tap-to-expand** - Bible references (e.g. `John 3:16`, `Rom 8:28-30`, or across chapters, `John 3:16-4:2`, `Gen 1:1-3:5`) are detected automatically; tap one to expand the passage inline from your vault Bible files; tap again to collapse
 
 ---
 
