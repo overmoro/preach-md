@@ -249,7 +249,7 @@
 	pointer-events: none;
 }
 
-.preach-bottom-btns--idle * {
+.preach-bottom-btns.preach-bottom-btns--idle * {
 	pointer-events: none;
 }
 
