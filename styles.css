@@ -361,10 +361,29 @@
    but inside preach view we reinforce it for dark background. */
 .preach-md-root mark,
 .preach-md-root .preach-body mark {
-	background: rgba(255, 210, 74, 0.28);
+	background: var(--preach-mark-bg, rgba(255, 210, 74, 0.28));
 	color: inherit;
 	border-radius: 2px;
 	padding: 0 1px;
+}
+
+.preach-md-root mark[data-highlight="red"] {
+	--preach-mark-bg: var(--highlight-background-red);
+}
+.preach-md-root mark[data-highlight="orange"] {
+	--preach-mark-bg: var(--highlight-background-orange);
+}
+.preach-md-root mark[data-highlight="yellow"] {
+	--preach-mark-bg: var(--highlight-background-yellow);
+}
+.preach-md-root mark[data-highlight="green"] {
+	--preach-mark-bg: var(--highlight-background-green);
+}
+.preach-md-root mark[data-highlight="blue"] {
+	--preach-mark-bg: var(--highlight-background-blue);
+}
+.preach-md-root mark[data-highlight="purple"] {
+	--preach-mark-bg: var(--highlight-background-purple);
 }
 
 /* Tappable block in highlight-mode gets a subtle tap affordance */
