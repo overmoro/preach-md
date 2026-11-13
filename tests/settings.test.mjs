@@ -7,7 +7,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { PreachMDSettingTab, DEFAULT_SETTINGS, parseStoredSettings } from "./.build/settings.mjs";
+import { PreachMDSettingTab, DEFAULT_SETTINGS, parseStoredSettings, noteTargetMinutes } from "./.build/settings.mjs";
 
 /** A settings tab wired to a fake plugin that records saves. */
 function makeTab() {
@@ -180,5 +180,21 @@ test("setControlValue bounds textScalePercent", async () => {
 	for (const bad of [69, 201, 110.5, "abc", ""]) {
 		await tab.setControlValue("textScalePercent", bad);
 		assert.equal(plugin.settings.textScalePercent, 130, `${String(bad)} should be ignored`);
+	}
+});
+
+test("noteTargetMinutes reads preach-minutes as a number or numeric string", () => {
+	assert.equal(noteTargetMinutes({ "preach-minutes": 35 }, 30), 35);
+	assert.equal(noteTargetMinutes({ "preach-minutes": "42" }, 30), 42);
+	assert.equal(noteTargetMinutes({ "preach-minutes": 1 }, 30), 1);
+	assert.equal(noteTargetMinutes({ "preach-minutes": 1440 }, 30), 1440);
+});
+
+test("noteTargetMinutes falls back to the setting when absent or invalid", () => {
+	assert.equal(noteTargetMinutes(undefined, 30), 30);
+	assert.equal(noteTargetMinutes(null, 30), 30);
+	assert.equal(noteTargetMinutes({}, 30), 30);
+	for (const bad of [0, -5, 1441, 12.5, "abc", "", "  ", "12.5", null, true, [35], NaN]) {
+		assert.equal(noteTargetMinutes({ "preach-minutes": bad }, 25), 25, String(bad));
 	}
 });

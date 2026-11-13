@@ -17,7 +17,7 @@ Inspired by the Preach function in Logos Bible Software.
 - **Live timer** - elapsed time with configurable amber and red thresholds
 - **Screen wake lock** - keeps the display on while preach mode is active
 - **Edge-swipe suppression** - prevents accidental sidebar openings
-- **Scripture tap-to-expand** - Bible references (e.g. `John 3:16`, `Rom 8:28-30`) are detected automatically; tap one to expand the passage inline from your vault Bible files; tap again to collapse
+- **Scripture tap-to-expand** - Bible references (e.g. `John 3:16`, `Rom 8:28-30`, or across chapters, `John 3:16-4:2`, `Gen 1:1-3:5`) are detected automatically; tap one to expand the passage inline from your vault Bible files; tap again to collapse
 
 ---
 
@@ -64,6 +64,8 @@ References in code blocks and callouts are intentionally skipped.
 - **Section heading level** - heading level used for the outline (default: 2, i.e. `##`)
 - **Text size** - sermon text scale in percent, 70 to 200 (default: 100). Also follows the iOS system text size.
 - **Bible folder path** - vault-relative path to your Bible chapter files (default: `30_Knowledge/Theology/Bible/CSB`). See [Bible vault format](#bible-vault-format) below for the expected folder structure.
+
+A note can set its own countdown with `preach-minutes: 35` in its frontmatter. It takes a whole number of minutes from 1 to 1440 (a number or a quoted number), and anything else falls back to **Target duration**. While the timer is idle a change applies straight away; once started (running or paused), it applies on the next reset.
 
 ---
 

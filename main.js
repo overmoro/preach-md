@@ -54,17 +54,27 @@ function boundedInt(value, min, max) {
     return void 0;
   return value >= min && value <= max ? value : void 0;
 }
+var MAX_MINUTES = 24 * 60;
+function noteTargetMinutes(frontmatter, fallback) {
+  var _a;
+  if (typeof frontmatter !== "object" || frontmatter === null)
+    return fallback;
+  let value = field(frontmatter, "preach-minutes");
+  if (typeof value === "string" && value.trim() !== "")
+    value = Number(value);
+  return (_a = boundedInt(value, 1, MAX_MINUTES)) != null ? _a : fallback;
+}
 function parseStoredSettings(raw) {
   if (typeof raw !== "object" || raw === null)
     return {};
   const out = {};
-  const targetMinutes = boundedInt(field(raw, "targetMinutes"), 1, 24 * 60);
+  const targetMinutes = boundedInt(field(raw, "targetMinutes"), 1, MAX_MINUTES);
   if (targetMinutes !== void 0)
     out.targetMinutes = targetMinutes;
-  const warnMinutes = boundedInt(field(raw, "warnMinutes"), 1, 24 * 60);
+  const warnMinutes = boundedInt(field(raw, "warnMinutes"), 1, MAX_MINUTES);
   if (warnMinutes !== void 0)
     out.warnMinutes = warnMinutes;
-  const critMinutes = boundedInt(field(raw, "critMinutes"), 1, 24 * 60);
+  const critMinutes = boundedInt(field(raw, "critMinutes"), 1, MAX_MINUTES);
   if (critMinutes !== void 0)
     out.critMinutes = critMinutes;
   const sectionHeadingLevel = boundedInt(field(raw, "sectionHeadingLevel"), 1, 6);
@@ -928,7 +938,7 @@ function normaliseBook(raw) {
     return null;
   return (_a = BOOK_MAP[key]) != null ? _a : null;
 }
-var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+))?/g;
+var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+)(?::(\d+))?)?/g;
 function parseReferences(text) {
   const results = [];
   SCRIPTURE_REGEX.lastIndex = 0;
@@ -951,14 +961,15 @@ function parseReferences(text) {
       continue;
     const chapter = parseInt(m[2], 10);
     const verseStart = parseInt(m[3], 10);
-    const verseEnd = m[4] ? parseInt(m[4], 10) : verseStart;
+    const chapterEnd = m[5] ? parseInt(m[4], 10) : chapter;
+    const verseEnd = m[5] ? parseInt(m[5], 10) : m[4] ? parseInt(m[4], 10) : verseStart;
     results.push({
       raw: m[0].slice(offset),
       book,
       chapter,
       verseStart,
+      chapterEnd,
       verseEnd,
-      crossChapter: false,
       index: m.index + offset,
       length: m[0].length - offset
     });
@@ -1108,20 +1119,24 @@ async function loadChapter(app, csbFolder, book, chapter) {
   return null;
 }
 async function fetchVerses(app, csbFolder, ref) {
-  if (ref.crossChapter) {
-    throw new Error("Cross-chapter ranges not supported yet.");
-  }
-  const map = await loadChapter(app, csbFolder, ref.book, ref.chapter);
-  if (!map) {
-    throw new Error(`Passage not found: ${ref.raw}`);
-  }
+  const notFound = () => new Error(`Passage not found: ${ref.raw}`);
+  if (ref.chapterEnd < ref.chapter)
+    throw notFound();
   const results = [];
-  for (let v = ref.verseStart; v <= ref.verseEnd; v++) {
-    const text = map.get(v);
-    if (text === void 0) {
-      throw new Error(`Passage not found: ${ref.raw}`);
+  for (let c = ref.chapter; c <= ref.chapterEnd; c++) {
+    const map = await loadChapter(app, csbFolder, ref.book, c);
+    if (!map)
+      throw notFound();
+    const first = c === ref.chapter ? ref.verseStart : 1;
+    const last = c === ref.chapterEnd ? ref.verseEnd : Math.max(...map.keys());
+    if (last < first)
+      throw notFound();
+    for (let v = first; v <= last; v++) {
+      const text = map.get(v);
+      if (text === void 0)
+        throw notFound();
+      results.push({ chapter: c, verse: v, text });
     }
-    results.push({ verse: v, text });
   }
   return results;
 }
@@ -1176,8 +1191,8 @@ var ScriptureExpander = class {
           book: ref.book,
           chapter: ref.chapter,
           verseStart: ref.verseStart,
-          verseEnd: ref.verseEnd,
-          crossChapter: ref.crossChapter
+          chapterEnd: ref.chapterEnd,
+          verseEnd: ref.verseEnd
         });
         span.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
@@ -1220,8 +1235,11 @@ var ScriptureExpander = class {
       expandEl.empty();
       expandEl.className = "preach-scripture-expand";
       const passageEl = expandEl.createSpan({ cls: "preach-scripture-passage" });
-      for (const { verse, text } of verses) {
-        passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: String(verse) });
+      let prevChapter = ref.chapter;
+      for (const { chapter, verse, text } of verses) {
+        const label = chapter !== prevChapter ? `${chapter}:${verse}` : String(verse);
+        prevChapter = chapter;
+        passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: label });
         const tmp = createDiv();
         await import_obsidian2.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
         const nodes = Array.from(tmp.childNodes);
@@ -1725,6 +1743,11 @@ var PreachView = class extends import_obsidian3.ItemView {
       () => this.preachBodyEl,
       this.containerEl
     );
+    this.registerDomEvent(document, "visibilitychange", () => {
+      if (document.visibilityState === "visible" && (!this.wakeLock || this.wakeLock.released)) {
+        void this.requestWakeLock();
+      }
+    });
     await this.requestWakeLock();
     this.suppressEdgeSwipes();
     if (this.file) {
@@ -1734,6 +1757,13 @@ var PreachView = class extends import_obsidian3.ItemView {
       this.app.vault.on("modify", (modified) => {
         if (this.file && modified.path === this.file.path) {
           void this.renderFile(this.file);
+        }
+      })
+    );
+    this.registerEvent(
+      this.app.metadataCache.on("changed", (changed) => {
+        if (this.file && changed.path === this.file.path) {
+          this.timer.updateThresholds(this.timerThresholds());
         }
       })
     );
@@ -1780,6 +1810,8 @@ var PreachView = class extends import_obsidian3.ItemView {
   }
   async setFile(file) {
     this.file = file;
+    if (this.timer)
+      this.timer.updateThresholds(this.timerThresholds());
     if (this.highlightManager) {
       this.highlightManager.updateFile(file);
     }
@@ -1789,6 +1821,16 @@ var PreachView = class extends import_obsidian3.ItemView {
     if (this.scrollEl) {
       await this.renderFile(file);
     }
+  }
+  timerThresholds() {
+    var _a;
+    const { targetMinutes, warnMinutes, critMinutes } = this.plugin.settings;
+    const frontmatter = this.file ? (_a = this.app.metadataCache.getFileCache(this.file)) == null ? void 0 : _a.frontmatter : void 0;
+    return {
+      targetMinutes: noteTargetMinutes(frontmatter, targetMinutes),
+      warnMinutes,
+      critMinutes
+    };
   }
   // Build the full preach UI into containerEl
   buildUI() {
@@ -1801,11 +1843,7 @@ var PreachView = class extends import_obsidian3.ItemView {
       this.resetIdleTimer();
     });
     this.timerEl = root.createDiv({ cls: "preach-timer-corner" });
-    this.timer = new PreachTimer(this.timerEl, {
-      targetMinutes: this.plugin.settings.targetMinutes,
-      warnMinutes: this.plugin.settings.warnMinutes,
-      critMinutes: this.plugin.settings.critMinutes
-    });
+    this.timer = new PreachTimer(this.timerEl, this.timerThresholds());
     this.bottomBtns = root.createDiv({ cls: "preach-bottom-btns" });
     this.outlineBtn = this.bottomBtns.createEl("button", {
       cls: "preach-corner-btn preach-corner-btn--outline",
