@@ -2233,6 +2233,7 @@ var PreachView = class extends import_obsidian4.ItemView {
     );
     this.formatManager = new FormatManager(this.app, this.file);
     this.buildUI();
+    this.containerEl.dataset.ignoreSwipe = "true";
     this.registerInterval(window.setInterval(() => this.strip.refresh(), 1e3));
     this.preachFormatToolbar = new PreachFormatToolbar(
       this.formatManager,
@@ -2247,7 +2248,6 @@ var PreachView = class extends import_obsidian4.ItemView {
     await this.requestWakeLock();
     if (this.closed)
       return;
-    this.containerEl.dataset.ignoreSwipe = "true";
     this.registerEvent(
       this.app.metadataCache.on("changed", (changed, data, cache) => {
         var _a;

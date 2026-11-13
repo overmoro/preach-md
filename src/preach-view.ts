@@ -165,6 +165,8 @@ export class PreachView extends ItemView {
 		this.formatManager = new FormatManager(this.app, this.file);
 
 		this.buildUI();
+		// Obsidian's swipe detector skips marked elements: no sidebar, pull-down or back swipes here
+		this.containerEl.dataset.ignoreSwipe = "true";
 		this.registerInterval(window.setInterval(() => this.strip.refresh(), 1000));
 
 		// Inline format toolbar restored in v0.6.6 with touch-gated listeners.
@@ -184,8 +186,6 @@ export class PreachView extends ItemView {
 		});
 		await this.requestWakeLock();
 		if (this.closed) return;
-		// Obsidian's swipe detector skips marked elements: no sidebar, pull-down or back swipes here
-		this.containerEl.dataset.ignoreSwipe = "true";
 
 		// Registered before the first render so a re-index during it isn't missed
 		this.registerEvent(
