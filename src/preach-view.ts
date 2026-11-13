@@ -89,9 +89,6 @@ export class PreachView extends ItemView {
 	// Wake lock
 	private wakeLock: WakeLockSentinel | null = null;
 
-	// Edge-swipe suppression
-	private touchHandler: ((e: TouchEvent) => void) | null = null;
-
 	// Set in onClose so onOpen stops carrying on after an early close
 	private closed = false;
 
@@ -256,7 +253,6 @@ export class PreachView extends ItemView {
 
 		this.timer.stop();
 		await this.releaseWakeLock();
-		this.restoreEdgeSwipes();
 		this.renderComponent.unload();
 	}
 
@@ -847,28 +843,21 @@ export class PreachView extends ItemView {
 		}
 	}
 
-	// Suppress edge-swipe gestures (Obsidian Mobile sidebar open)
+	// Block Obsidian Mobile's sidebar edge-swipe while preaching. Bubble phase on
+	// the view, so Settings and other modals (under body) keep their own swipe.
 	private suppressEdgeSwipes(): void {
-		this.touchHandler = (e: TouchEvent) => {
-			if (e.touches.length === 1) {
-				const x = e.touches[0].clientX;
-				if (x < 30 || x > window.innerWidth - 30) {
-					e.stopPropagation();
+		this.registerDomEvent(
+			this.containerEl,
+			"touchstart",
+			(e: TouchEvent) => {
+				if (e.touches.length === 1) {
+					const x = e.touches[0].clientX;
+					if (x < 30 || x > window.innerWidth - 30) {
+						e.stopPropagation();
+					}
 				}
-			}
-		};
-		document.addEventListener("touchstart", this.touchHandler, {
-			capture: true,
-			passive: true,
-		});
-	}
-
-	private restoreEdgeSwipes(): void {
-		if (this.touchHandler) {
-			document.removeEventListener("touchstart", this.touchHandler, {
-				capture: true,
-			});
-			this.touchHandler = null;
-		}
+			},
+			{ passive: true }
+		);
 	}
 }
