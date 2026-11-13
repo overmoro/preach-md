@@ -9,7 +9,11 @@
 .preach-md-root {
 	/* Typography */
 	--preach-font-family: Georgia, "Times New Roman", serif;
-	--preach-font-size: 1.35rem;
+	--preach-text-scale: 1;
+	/* Obsidian 1.14+ supplies --font-preferred-size (a length, 16px by default); 1rem is today's base */
+	--preach-base-size: var(--font-preferred-size, 1rem);
+	--preach-font-size: calc(var(--preach-base-size) * 1.35 * var(--preach-text-scale));
+	--preach-h2-size: calc(var(--preach-base-size) * 1.65 * var(--preach-text-scale));
 	--preach-line-height: 1.85;
 	--preach-max-width: 780px;
 	--preach-content-padding: calc(env(safe-area-inset-top, 0px) + 4rem) 1.75rem 8rem;
@@ -134,14 +138,14 @@
 }
 
 .preach-body h2 {
-	font-size: 1.65rem;
+	font-size: var(--preach-h2-size);
 	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 	padding-bottom: 0.4rem;
 	margin-top: 3rem;
 }
 
 .preach-body h3 {
-	font-size: 1.35rem;
+	font-size: calc(var(--preach-base-size) * 1.35 * var(--preach-text-scale));
 }
 
 .preach-body p {
@@ -265,6 +269,19 @@
 
 .preach-corner-btn:active {
 	opacity: 0.6;
+}
+
+.preach-bottom-size {
+	display: flex;
+	gap: 4px;
+	pointer-events: all;
+}
+
+.preach-size-btn {
+	width: calc(var(--preach-corner-btn-size) + 8px);
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+	font-size: 1.05rem;
+	font-weight: 600;
 }
 
 /* Exit wrap: column layout so chip pops upward above the X button */
@@ -530,12 +547,9 @@
 
 @media (max-width: 480px) {
 	.preach-body {
-		--preach-font-size: 1.15rem;
+		--preach-font-size: calc(var(--preach-base-size) * 1.15 * var(--preach-text-scale));
+		--preach-h2-size: calc(var(--preach-base-size) * 1.35 * var(--preach-text-scale));
 		padding: 1.25rem 1rem 8rem;
-	}
-
-	.preach-body h2 {
-		font-size: 1.35rem;
 	}
 }
 

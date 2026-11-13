@@ -45,6 +45,7 @@ Alternatively, on iPad: Settings → Community plugins → Browse → search "Pr
 | Top-left | Outline | Shows section headings. Tap a heading to jump. |
 | Top-right | Exit | First tap shows "Exit?", second tap within 3s closes. |
 | Top-centre | Timer | Countdown from target duration. Single tap pauses/resumes. Double-tap resets. Counts up in red after reaching zero. |
+| Bottom-centre | A- / A+ | Steps the text size by 10% and remembers it for the next sermon. |
 | Bottom-right | Edit | Switches to edit mode at the current scroll position. |
 
 ### Scripture expansion
@@ -61,6 +62,7 @@ References in code blocks and callouts are intentionally skipped.
 - **Amber warning** - timer turns amber at this many minutes remaining (default: 5)
 - **Red warning** - timer turns red at this many minutes remaining (default: 1)
 - **Section heading level** - heading level used for the outline (default: 2, i.e. `##`)
+- **Text size** - sermon text scale in percent, 70 to 200 (default: 100). Follows the system text size where Obsidian supports it.
 - **Bible folder path** - vault-relative path to your Bible chapter files (default: `30_Knowledge/Theology/Bible/CSB`). See [Bible vault format](#bible-vault-format) below for the expected folder structure.
 
 ---

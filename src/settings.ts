@@ -8,7 +8,12 @@ export interface PreachMDSettings {
 	critMinutes: number;
 	sectionHeadingLevel: number;
 	csbFolderPath: string;
+	textScalePercent: number;
 }
+
+export const MIN_TEXT_SCALE = 70;
+export const MAX_TEXT_SCALE = 200;
+export const TEXT_SCALE_STEP = 10;
 
 export const DEFAULT_SETTINGS: PreachMDSettings = {
 	targetMinutes: 30,
@@ -16,6 +21,7 @@ export const DEFAULT_SETTINGS: PreachMDSettings = {
 	critMinutes: 1,
 	sectionHeadingLevel: 2,
 	csbFolderPath: "30_Knowledge/Theology/Bible/CSB",
+	textScalePercent: 100,
 };
 
 /**
@@ -66,6 +72,9 @@ export function parseStoredSettings(raw: unknown): Partial<PreachMDSettings> {
 
 	const csbFolderPath = field(raw, "csbFolderPath");
 	if (typeof csbFolderPath === "string") out.csbFolderPath = csbFolderPath.trim();
+
+	const textScalePercent = boundedInt(field(raw, "textScalePercent"), MIN_TEXT_SCALE, MAX_TEXT_SCALE);
+	if (textScalePercent !== undefined) out.textScalePercent = textScalePercent;
 
 	return out;
 }
@@ -151,6 +160,25 @@ export class PreachMDSettingTab extends PluginSettingTab {
 			},
 			{
 				type: "group",
+				heading: "Display",
+				items: [
+					{
+						name: "Text size (%)",
+						desc: "Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.",
+						aliases: ["font", "zoom", "bigger", "larger"],
+						control: {
+							type: "number",
+							key: "textScalePercent",
+							defaultValue: DEFAULT_SETTINGS.textScalePercent,
+							placeholder: String(DEFAULT_SETTINGS.textScalePercent),
+							min: MIN_TEXT_SCALE,
+							max: MAX_TEXT_SCALE,
+						},
+					},
+				],
+			},
+			{
+				type: "group",
 				heading: "Scripture",
 				items: [
 					{
@@ -192,6 +220,12 @@ export class PreachMDSettingTab extends PluginSettingTab {
 				const n = Number(value);
 				if (!Number.isFinite(n) || n < 1 || n > 6) return;
 				settings.sectionHeadingLevel = n;
+				break;
+			}
+			case "textScalePercent": {
+				const n = Number(value);
+				if (!Number.isInteger(n) || n < MIN_TEXT_SCALE || n > MAX_TEXT_SCALE) return;
+				settings.textScalePercent = n;
 				break;
 			}
 			case "csbFolderPath":
@@ -275,6 +309,25 @@ export class PreachMDSettingTab extends PluginSettingTab {
 						const n = parseInt(value, 10);
 						if (!isNaN(n) && n >= 1 && n <= 6) {
 							this.plugin.settings.sectionHeadingLevel = n;
+							void this.plugin.saveSettings();
+						}
+					})
+			);
+
+		// Display
+		new Setting(containerEl).setName("Display").setHeading();
+
+		new Setting(containerEl)
+			.setName("Text size (%)")
+			.setDesc("Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.")
+			.addText((text) =>
+				text
+					.setPlaceholder("100")
+					.setValue(String(this.plugin.settings.textScalePercent))
+					.onChange((value) => {
+						const n = parseInt(value, 10);
+						if (!isNaN(n) && n >= MIN_TEXT_SCALE && n <= MAX_TEXT_SCALE) {
+							this.plugin.settings.textScalePercent = n;
 							void this.plugin.saveSettings();
 						}
 					})
