@@ -1,4 +1,5 @@
-import { Plugin, WorkspaceLeaf } from "obsidian";
+import { Plugin, WorkspaceLeaf, normalizePath } from "obsidian";
+import { setBibleFile } from "./scripture";
 import { PREACH_VIEW_TYPE, PreachView } from "./preach-view";
 import {
 	PreachMDSettings,
@@ -12,6 +13,8 @@ export default class PreachMDPlugin extends Plugin {
 
 	async onload(): Promise<void> {
 		await this.loadSettings();
+		const dir = this.manifest.dir ?? `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
+		setBibleFile(normalizePath(`${dir}/bsb.txt`));
 
 		// Register the preach view type
 		this.registerView(

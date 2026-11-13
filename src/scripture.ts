@@ -1,12 +1,12 @@
 // Scripture reference detection and inline expansion for Preach MD.
 // Detects Bible references in rendered sermon text and expands them inline
-// from vault CSB chapter files. Expansion is in-memory only.
+// from vault Bible chapter files or the downloaded BSB. Expansion is in-memory only.
 //
 // Reference parsing approach ported from obsidian-bible-linker by Jakub Kuchejda.
 // See: https://github.com/kuchejak/obsidian-bible-linker
 // Used under MIT licence.
 
-import { App, Component, MarkdownRenderer, TFile } from "obsidian";
+import { App, Component, MarkdownRenderer, TFile, requestUrl } from "obsidian";
 
 // ---------------------------------------------------------------------------
 // Book name normalisation
@@ -554,7 +554,7 @@ function parseChapterFile(content: string): Map<number, string> {
  * Load and cache a chapter, then return the verse map.
  * Returns null if the file doesn't exist.
  */
-async function loadChapter(
+async function loadVaultChapter(
 	app: App,
 	csbFolder: string,
 	book: string,
@@ -578,37 +578,133 @@ async function loadChapter(
 	return null;
 }
 
+// ---------------------------------------------------------------------------
+// Downloaded Bible (Berean Standard Bible, public domain)
+// ---------------------------------------------------------------------------
+
+export const BSB_URL = "https://bereanbible.com/bsb.txt";
+/** Display only; nothing checks the download against it. */
+export const BSB_SIZE = "4.3 MB";
+const BSB_CHAPTERS = 1189;
+const BSB_VERSES = 31102;
+// Verse text is rendered as Markdown, so anything Markdown or HTML could act on
+// is refused, plus bare www. autolinks. The publisher's file contains none.
+const MARKUP = /[[\]<>*_`#|\\~$^={}/&%@+]|www\./i;
+
+type BibleChapters = Map<string, Map<number, string>>;
+
+let bibleFile: string | null = null;
+let bible: Promise<BibleChapters | null> | null = null;
+
+/** Where the downloaded Bible lives; also drops anything read from it before. */
+export function setBibleFile(path: string): void {
+	bibleFile = path;
+	bible = null;
+}
+
+/** Chapters keyed `${book} ${chapter}`, or null unless the text is a whole, plain-text BSB. */
+export function parseBibleText(text: string): BibleChapters | null {
+	const chapters: BibleChapters = new Map();
+	let verses = 0;
+	for (const line of text.split(/\r?\n/)) {
+		const m = /^(.+) (\d+):(\d+)\t(.*)$/.exec(line);
+		if (!m) continue;
+		const book = normaliseBook(m[1]);
+		if (book === null || MARKUP.test(m[4])) return null;
+		const key = `${book} ${parseInt(m[2], 10)}`;
+		const verse = parseInt(m[3], 10);
+		let chapter = chapters.get(key);
+		if (!chapter) chapters.set(key, (chapter = new Map<number, string>()));
+		if (!chapter.has(verse)) verses++;
+		chapter.set(verse, m[4].trim());
+	}
+	return text.endsWith("\n") && chapters.size === BSB_CHAPTERS && verses === BSB_VERSES
+		? chapters
+		: null;
+}
+
+function loadDownloadedBible(app: App): Promise<BibleChapters | null> {
+	if (bibleFile === null) return Promise.resolve(null);
+	bible ??= app.vault.adapter.read(bibleFile).then(parseBibleText, () => null);
+	return bible;
+}
+
+export async function bibleStatus(app: App): Promise<"absent" | "ready" | "damaged"> {
+	if (bibleFile === null || !(await app.vault.adapter.exists(bibleFile))) return "absent";
+	return (await loadDownloadedBible(app)) ? "ready" : "damaged";
+}
+
+export async function downloadBible(app: App): Promise<void> {
+	const file = bibleFile;
+	if (file === null) throw new Error("the plugin folder isn't known yet");
+	// ponytail: no request timeout of our own; relies on the platform's. Revisit if a user reports a row stuck on "Downloading".
+	const { text } = await requestUrl({ url: BSB_URL });
+	if (parseBibleText(text) === null) {
+		throw new Error("the download was incomplete or wasn't the expected Bible text. Nothing was saved.");
+	}
+	const adapter = app.vault.adapter;
+	const part = `${file}.part`;
+	await adapter.write(part, text);
+	if (await adapter.exists(file)) await adapter.remove(file);
+	await adapter.rename(part, file);
+	setBibleFile(file);
+}
+
+export async function removeBible(app: App): Promise<void> {
+	const file = bibleFile;
+	if (file === null) return;
+	const adapter = app.vault.adapter;
+	for (const path of [file, `${file}.part`]) {
+		if (await adapter.exists(path)) await adapter.remove(path);
+	}
+	setBibleFile(file);
+}
+
+type VerseRow = { chapter: number; verse: number; text: string };
+
+/** The passage from one source, or null if that source can't serve all of it. */
+async function readRange(
+	ref: ScriptureRef,
+	load: (chapter: number) => Promise<Map<number, string> | null>
+): Promise<VerseRow[] | null> {
+	const results: VerseRow[] = [];
+	for (let c = ref.chapter; c <= ref.chapterEnd; c++) {
+		const map = await load(c);
+		if (!map) return null;
+
+		const first = c === ref.chapter ? ref.verseStart : 1;
+		const last = c === ref.chapterEnd ? ref.verseEnd : Math.max(...map.keys());
+		if (last < first) return null;
+		for (let v = first; v <= last; v++) {
+			const text = map.get(v);
+			if (text === undefined) return null;
+			results.push({ chapter: c, verse: v, text });
+		}
+	}
+	return results;
+}
+
 /**
  * Fetch verse text for a reference. Returns an array of { chapter, verse, text }
  * entries, in reading order. A cross-chapter range runs from the start verse to
  * the end of the first chapter, through any whole chapters between, then from
- * verse 1 to the end verse of the last chapter.
+ * verse 1 to the end verse of the last chapter. The vault folder is tried first;
+ * the downloaded Bible is used only if the folder can't serve the whole passage.
  * Throws a user-readable string on error.
  */
 export async function fetchVerses(
 	app: App,
 	csbFolder: string,
 	ref: ScriptureRef
-): Promise<{ chapter: number; verse: number; text: string }[]> {
+): Promise<VerseRow[]> {
 	const notFound = () => new Error(`Passage not found: ${ref.raw}`);
 	if (ref.chapterEnd < ref.chapter) throw notFound();
 
-	const results: { chapter: number; verse: number; text: string }[] = [];
-	for (let c = ref.chapter; c <= ref.chapterEnd; c++) {
-		const map = await loadChapter(app, csbFolder, ref.book, c);
-		if (!map) throw notFound();
-
-		const first = c === ref.chapter ? ref.verseStart : 1;
-		const last = c === ref.chapterEnd ? ref.verseEnd : Math.max(...map.keys());
-		if (last < first) throw notFound();
-		for (let v = first; v <= last; v++) {
-			const text = map.get(v);
-			if (text === undefined) throw notFound();
-			results.push({ chapter: c, verse: v, text });
-		}
-	}
-
-	return results;
+	const rows =
+		(await readRange(ref, (c) => loadVaultChapter(app, csbFolder, ref.book, c))) ??
+		(await readRange(ref, async (c) => (await loadDownloadedBible(app))?.get(`${ref.book} ${c}`) ?? null));
+	if (!rows) throw notFound();
+	return rows;
 }
 
 
