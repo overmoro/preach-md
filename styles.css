@@ -307,6 +307,7 @@
 
 /* Left-side group: outline + passage buttons */
 .preach-bottom-left {
+	flex: 1 1 0;
 	display: flex;
 	align-items: flex-end;
 	gap: 4px;
@@ -315,6 +316,8 @@
 
 /* Right-side group: edit button + exit wrap side by side */
 .preach-bottom-right {
+	flex: 1 1 0;
+	justify-content: flex-end;
 	display: flex;
 	align-items: flex-end;
 	gap: 4px;
