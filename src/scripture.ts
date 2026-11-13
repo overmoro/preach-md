@@ -338,7 +338,7 @@ export function parseReferences(text: string, passages: ScriptureRef[] = []): Pa
 			const chapter = verseChapter(passage, verseStart);
 			if (chapter === null) continue;
 			// "Corinthians v.15" or "Jude v.3": the verse belongs to that book, not the passage.
-			const before = /((?:[123]\s?)?[A-Z][a-z]+)\.?\s*$/.exec(text.slice(0, m.index));
+			const before = /([A-Z][a-z]+)\.?\s*$/.exec(text.slice(Math.max(0, m.index - 32), m.index));
 			if (before && (normaliseBook(before[1]) ?? normaliseBook(`1 ${before[1]}`))) continue;
 			const start = m.index;
 			const end = start + m[0].length;

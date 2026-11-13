@@ -466,7 +466,7 @@ function parseReferences(text, passages = []) {
       const chapter = verseChapter(passage, verseStart);
       if (chapter === null)
         continue;
-      const before = /((?:[123]\s?)?[A-Z][a-z]+)\.?\s*$/.exec(text.slice(0, m.index));
+      const before = /([A-Z][a-z]+)\.?\s*$/.exec(text.slice(Math.max(0, m.index - 32), m.index));
       if (before && ((_a = normaliseBook(before[1])) != null ? _a : normaliseBook(`1 ${before[1]}`)))
         continue;
       const start = m.index;

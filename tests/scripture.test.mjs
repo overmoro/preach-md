@@ -482,6 +482,10 @@ test("hostile verse-only text yields nothing", () => {
 	for (const t of ["Back in Corinthians v.15", "Jude v.3", "Philemon v 10", "3 John v 5"]) {
 		assert.deepEqual(tuples(t, COL), [], t);
 	}
+	for (const t of ["3 Kings v.5", "1 Cor. v.15", "Back in Jude   v.3", "1 Cor.  v 15", "2 Th v.5"]) {
+		assert.deepEqual(tuples(t, COL), [], t);
+	}
+	assert.deepEqual(tuples("x".repeat(100) + " is v.5", COL), [["v.5", "Colossians", 2, 5, 2, 5]]);
 	assert.deepEqual(tuples("is v.5", COL), [["v.5", "Colossians", 2, 5, 2, 5]]);
 	assert.deepEqual(tuples("v 1 John 4:8", COL), [["1 John 4:8", "1 John", 4, 8, 4, 8]]);
 	assert.deepEqual(tuples("v.2 Cor 5:17", COL), [["2 Cor 5:17", "2 Corinthians", 5, 17, 5, 17]]);
