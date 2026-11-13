@@ -415,10 +415,9 @@
 	--preach-mark-bg: var(--highlight-background-purple);
 }
 
-/* Tappable block in highlight-mode gets a subtle tap affordance */
-.preach-block[data-highlightable="true"] {
-	border-radius: 4px;
-	transition: background 0.1s;
+/* Fallback whole-note render */
+.preach-body pre.frontmatter {
+	display: none;
 }
 
 /* ------------------------------------------------------------------ */
@@ -787,7 +786,7 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 	position: fixed;
 	z-index: 200;
 	display: flex;
-	align-items: center;
+	flex-direction: column;
 	gap: 4px;
 	background: color-mix(in srgb, #1a1a1a 80%, transparent);
 	-webkit-backdrop-filter: blur(18px);
@@ -800,6 +799,18 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 	transform: translateY(4px);
 	transition: opacity 0.12s ease, transform 0.12s ease;
 	/* Hidden by default; JS adds --visible class */
+}
+
+.preach-inline-fmt-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.preach-inline-fmt-btn--colour {
+	min-width: 44px;
+	padding: 0;
+	font-size: 1.1rem;
 }
 
 .preach-inline-format-bar--visible {
