@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 import {
 	BOOKS,
 	chapterPaths,
+	fetchVerses,
 	normaliseBook,
 	parseReferences,
 } from "./.build/scripture.mjs";
@@ -185,4 +186,127 @@ test("ordinary references are unaffected by the 'of' allowance", () => {
 			["Matthew", 5, 3, 3],
 		],
 	);
+});
+
+test("cross-chapter ranges are detected with their end chapter and verse", () => {
+	const refs = parseReferences("See John 3:16-4:2 and Gen 1:1-3:5 then Rom 8:28-30.");
+	assert.deepEqual(
+		refs.map((r) => [r.raw, r.book, r.chapter, r.verseStart, r.chapterEnd, r.verseEnd, r.crossChapter]),
+		[
+			["John 3:16-4:2", "John", 3, 16, 4, 2, true],
+			["Gen 1:1-3:5", "Genesis", 1, 1, 3, 5, true],
+			["Rom 8:28-30", "Romans", 8, 28, 8, 30, false],
+		],
+	);
+});
+
+test("same-chapter forms keep chapterEnd equal to chapter", () => {
+	const [a, b] = parseReferences("John 3:16 and John 3:16-18");
+	assert.deepEqual([a.chapterEnd, a.verseEnd, a.crossChapter], [3, 16, false]);
+	assert.deepEqual([b.chapterEnd, b.verseEnd, b.crossChapter], [3, 18, false]);
+});
+
+test("a cross-chapter range does not swallow the text after it", () => {
+	const text = "Read John 3:16-4:2, then John 3:16-4: nothing, and John 3:16-4 alone.";
+	const refs = parseReferences(text);
+	assert.deepEqual(
+		refs.map((r) => text.slice(r.index, r.index + r.length)),
+		["John 3:16-4:2", "John 3:16-4", "John 3:16-4"],
+	);
+});
+
+/** Builds a minimal vault: path -> file content, enough for fetchVerses. */
+function fakeApp(files) {
+	return {
+		vault: {
+			getAbstractFileByPath: (p) => (p in files ? { isTFile: true, path: p } : null),
+			read: async (f) => files[f.path],
+		},
+	};
+}
+
+function chapterFile(n, count) {
+	let out = `# Chapter ${n}\n`;
+	for (let v = 1; v <= count; v++) out += `\n###### ${v}\nc${n}v${v} text\n`;
+	return out;
+}
+
+function ref(over) {
+	return { raw: "x", book: "John", chapter: 3, verseStart: 1, chapterEnd: 3, verseEnd: 1, crossChapter: false, ...over };
+}
+
+const flat = (rows) => rows.map((r) => `${r.chapter}:${r.verse}=${r.text}`);
+
+test("a two-chapter range reads to the end of the first chapter then from verse 1", async () => {
+	const app = fakeApp({
+		"B1/John/John 3.md": chapterFile(3, 4),
+		"B1/John/John 4.md": chapterFile(4, 5),
+	});
+	const rows = await fetchVerses(app, "B1", ref({ verseStart: 3, chapterEnd: 4, verseEnd: 2, crossChapter: true }));
+	assert.deepEqual(flat(rows), [
+		"3:3=c3v3 text", "3:4=c3v4 text", "4:1=c4v1 text", "4:2=c4v2 text",
+	]);
+});
+
+test("a range over three chapters includes the whole middle chapter", async () => {
+	const app = fakeApp({
+		"B2/Genesis/Gen 1.md": chapterFile(1, 3),
+		"B2/Genesis/Gen 2.md": chapterFile(2, 2),
+		"B2/Genesis/Gen 3.md": chapterFile(3, 4),
+	});
+	const rows = await fetchVerses(
+		app,
+		"B2",
+		ref({ book: "Genesis", chapter: 1, verseStart: 2, chapterEnd: 3, verseEnd: 1, crossChapter: true }),
+	);
+	assert.deepEqual(rows.map((r) => `${r.chapter}:${r.verse}`), ["1:2", "1:3", "2:1", "2:2", "3:1"]);
+});
+
+test("cross-chapter ranges read the numbered vault layout", async () => {
+	const app = fakeApp({
+		"B3/43 - John/John-03.md": chapterFile(3, 2),
+		"B3/43 - John/John-04.md": chapterFile(4, 2),
+	});
+	const rows = await fetchVerses(app, "B3", ref({ verseStart: 2, chapterEnd: 4, verseEnd: 1, crossChapter: true }));
+	assert.deepEqual(rows.map((r) => `${r.chapter}:${r.verse}`), ["3:2", "4:1"]);
+});
+
+test("malformed spans fail with the passage-not-found message", async () => {
+	const app = fakeApp({
+		"B4/John/John 3.md": chapterFile(3, 4),
+		"B4/John/John 4.md": chapterFile(4, 3),
+	});
+	const cases = {
+		"end chapter before start": ref({ chapter: 4, chapterEnd: 3, verseEnd: 1, crossChapter: false }),
+		"same chapter, end verse before start": ref({ verseStart: 5, verseEnd: 2 }),
+		"end chapter missing from vault": ref({ chapterEnd: 5, verseEnd: 1, crossChapter: true }),
+		"end verse past the last verse": ref({ chapterEnd: 4, verseEnd: 9, crossChapter: true }),
+		"start verse missing": ref({ verseStart: 9, chapterEnd: 4, verseEnd: 1, crossChapter: true }),
+	};
+	for (const [name, r] of Object.entries(cases)) {
+		await assert.rejects(fetchVerses(app, "B4", { ...r, raw: "John X" }), /^Error: Passage not found: John X$/, name);
+	}
+});
+
+test("a missing middle chapter fails the whole range", async () => {
+	const app = fakeApp({
+		"B5/John/John 3.md": chapterFile(3, 2),
+		"B5/John/John 5.md": chapterFile(5, 2),
+	});
+	await assert.rejects(
+		fetchVerses(app, "B5", ref({ chapterEnd: 5, verseEnd: 1, crossChapter: true })),
+		/Passage not found/,
+	);
+});
+
+test("every chapter read is cached", async () => {
+	const files = { "B6/John/John 3.md": chapterFile(3, 2), "B6/John/John 4.md": chapterFile(4, 2) };
+	let reads = 0;
+	const app = fakeApp(files);
+	const read = app.vault.read;
+	app.vault.read = async (f) => (reads++, read(f));
+	const r = ref({ chapterEnd: 4, verseEnd: 1, crossChapter: true });
+	await fetchVerses(app, "B6", r);
+	await fetchVerses(app, "B6", r);
+	assert.equal(reads, 2);
 });

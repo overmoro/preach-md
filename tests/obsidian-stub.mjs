@@ -3,7 +3,12 @@
 // none of the pure functions under test call into them.
 export class App {}
 export class Component {}
-export class TFile {}
+export class TFile {
+	// Lets tests hand fetchVerses plain objects tagged as files.
+	static [Symbol.hasInstance](o) {
+		return Boolean(o && o.isTFile);
+	}
+}
 export const MarkdownRenderer = {};
 
 // Enough of the settings surface for the declarative definitions to be read.
