@@ -11,14 +11,16 @@ Inspired by the Preach function in Logos Bible Software.
 - **Preach view** - full-screen reading surface, Obsidian sidebars hidden, no accidental state changes
 - **Large serif typography** - high contrast, generous line-height, tuned for live delivery
 - **Free vertical scroll** - scroll position remembered within the session
-- **Section outline** - tap the top-left button for a section list; tap any heading to jump there
+- **Section outline** - tap the bottom-left button for a section list; tap any heading to jump there
 - **Exit confirmation** - two-step exit (tap once to see "Exit?", tap again to confirm)
 - **Edit round-trip** - bottom-right button switches to edit mode at the current position
 - **Live timer** - elapsed time with configurable amber and red thresholds
 - **Screen wake lock** - keeps the display on while preach mode is active
 - **Edge-swipe suppression** - prevents accidental sidebar openings
 - **Highlight colours** - highlights coloured in Obsidian 1.14.4 or later keep their colour in preach view
-- **Scripture tap-to-expand** - Bible references (e.g. `John 3:16`, `Rom 8:28-30`, or across chapters, `John 3:16-4:2`, `Gen 1:1-3:5`) are detected automatically; tap one to expand the passage inline from your vault Bible files; tap again to collapse
+- **Scripture tap-to-expand** - Bible references (e.g. `John 3:16`, `Rom 8:28-30`, or across chapters, `John 3:16-4:2`, `Gen 1:1-3:5`, en dash ranges like `Rom 8:28–30`, and lists like `Deut 30:6; 10:16`) are detected automatically; tap one to expand the passage inline from your vault Bible files; tap again to collapse
+- **Verse-only references** - in a note with a `passage` in its frontmatter, `v.11`, `vv. 14-15` and the like expand from that passage
+- **Passage view** - one tap shows the whole sermon passage, large, for reading aloud; one tap anywhere closes it
 
 ---
 
@@ -43,10 +45,11 @@ Alternatively, on iPad: Settings → Community plugins → Browse → search "Pr
 
 | Location | Control | Action |
 |---|---|---|
-| Top-left | Outline | Shows section headings. Tap a heading to jump. |
-| Top-right | Exit | First tap shows "Exit?", second tap within 3s closes. |
+| Bottom-left | Outline | Shows section headings. Tap a heading to jump. |
+| Bottom-right | Exit | First tap shows "Exit?", second tap within 3s closes. |
 | Top-centre | Timer | Countdown from target duration. Single tap pauses/resumes. Double-tap resets. Counts up in red after reaching zero. |
 | Bottom-centre | A- / A+ | Steps the text size by 10% and remembers it for the next sermon. |
+| Bottom-left, beside Outline | Passage | Shows the note's passage full-screen for reading aloud. Tap anywhere to close; your place in the sermon doesn't move. Only shown when the note has a `passage`. |
 | Bottom-right | Edit | Switches to edit mode at the current scroll position. |
 
 ### Scripture expansion
@@ -54,6 +57,26 @@ Alternatively, on iPad: Settings → Community plugins → Browse → search "Pr
 When preach mode is open, detected Bible references appear with a dotted underline. Tap a reference to expand the passage inline. The verse text is read from your vault Bible files (configurable in settings). Tap the expanded passage to collapse it.
 
 References in code blocks and callouts are intentionally skipped.
+
+### Sermon passage
+
+Name the passage in the note's frontmatter with `passage`:
+
+    passage: John 3:16-21
+
+or as a list of links, the way Obsidian's property editor writes them:
+
+    passage:
+      - "[[Colossians 2:11-15]]"
+
+A link's display text is used, so `[[Rom 8|Romans 8:28]]` means Romans 8:28. A whole chapter works too (`passage: Amos 4`, `passage: Matthew 5–7`). Quote links in the YAML; Obsidian does this for you.
+
+With a passage set:
+
+- The **Passage** button shows it in full, every entry if the list has several.
+- Verse-only references (`v.11`, `v. 10`, `vv.14-15`, `v11`) expand from the passage's chapter, including verses just outside it (`v.10` in a note on Colossians 2:11-15 means Colossians 2:10). This only happens when the note has a single passage. If the passage crosses into the next chapter, a number at or after its first verse means the first chapter and one at or before its last verse means the second; any other number isn't marked, rather than guess.
+
+Ranges that cross a verse your translation leaves out (Mark 9:44, Matthew 17:21) skip it rather than failing.
 
 ---
 

@@ -14,6 +14,7 @@ import {
 	chapterPaths,
 	fetchVerses,
 	normaliseBook,
+	notePassages,
 	parseReferences,
 } from "./.build/scripture.mjs";
 
@@ -313,4 +314,209 @@ test("every chapter read is cached", async () => {
 	await fetchVerses(app, "B6", r);
 	await fetchVerses(app, "B6", r);
 	assert.equal(reads, 2);
+});
+
+// ---------------------------------------------------------------------------
+// Passage, verse-only references, en dash, continuations, omitted verses
+// ---------------------------------------------------------------------------
+
+/** Parse, assert the slice invariant, and return comparable tuples. */
+function tuples(text, passages) {
+	const rows = parseReferences(text, passages);
+	let prevEnd = 0;
+	for (const r of rows) {
+		assert.equal(text.slice(r.index, r.index + r.length), r.raw, `slice of ${r.raw}`);
+		assert.ok(r.index >= prevEnd, `ascending, non-overlapping at ${r.raw}`);
+		prevEnd = r.index + r.length;
+	}
+	return rows.map((r) => [r.raw, r.book, r.chapter, r.verseStart, r.chapterEnd, r.verseEnd]);
+}
+
+const COL = [{ raw: "Colossians 2:11-15", book: "Colossians", chapter: 2, verseStart: 11, chapterEnd: 2, verseEnd: 15 }];
+const passage = (book, chapter, verseStart, chapterEnd, verseEnd) =>
+	[{ raw: "p", book, chapter, verseStart, chapterEnd, verseEnd }];
+
+test("en dash ranges parse like hyphen ranges", () => {
+	assert.deepEqual(tuples("John 3:16–4:2 and Rom 8:28–30."), [
+		["John 3:16–4:2", "John", 3, 16, 4, 2],
+		["Rom 8:28–30", "Romans", 8, 28, 8, 30],
+	]);
+	assert.deepEqual(tuples("John 3:16 – 4:2"), [["John 3:16", "John", 3, 16, 3, 16]]);
+});
+
+test("list continuations inherit the book", () => {
+	assert.deepEqual(tuples("Deut 30:6; 10:16"), [
+		["Deut 30:6", "Deuteronomy", 30, 6, 30, 6],
+		["10:16", "Deuteronomy", 10, 16, 10, 16],
+	]);
+	assert.deepEqual(tuples("(Also John 5:18, 10:30-33, 20:28)"), [
+		["John 5:18", "John", 5, 18, 5, 18],
+		["10:30-33", "John", 10, 30, 10, 33],
+		["20:28", "John", 20, 28, 20, 28],
+	]);
+	assert.deepEqual(tuples("Zech 9:9-17; 12:10–13:1"), [
+		["Zech 9:9-17", "Zechariah", 9, 9, 9, 17],
+		["12:10–13:1", "Zechariah", 12, 10, 13, 1],
+	]);
+	assert.deepEqual(tuples("Matt 15:32;23:37"), [
+		["Matt 15:32", "Matthew", 15, 32, 15, 32],
+		["23:37", "Matthew", 23, 37, 23, 37],
+	]);
+});
+
+test("hostile continuations", () => {
+	const r = (raw, book, c, v) => [raw, book, c, v, c, v];
+	assert.deepEqual(tuples("Romans 8:28, 31 people came"), [r("Romans 8:28", "Romans", 8, 28)]);
+	assert.deepEqual(tuples("Romans 8:28; 31 people came"), [r("Romans 8:28", "Romans", 8, 28)]);
+	for (const t of ["John 3:16, 10:30am", "John 3:16, 10:30 pm", "John 3:16, 10:30 a.m."]) {
+		assert.deepEqual(tuples(t), [r("John 3:16", "John", 3, 16)], t);
+	}
+	assert.deepEqual(tuples("Doors open 10:30; 11:15 for coffee"), []);
+	assert.deepEqual(tuples("John 3:16 at 10:30, 11:15"), [r("John 3:16", "John", 3, 16)]);
+	assert.deepEqual(tuples("Romans 8:28, 1 John 4:8"), [r("Romans 8:28", "Romans", 8, 28), r("1 John 4:8", "1 John", 4, 8)]);
+	assert.deepEqual(tuples("Constructor 1:1; 2:3"), []);
+	assert.deepEqual(tuples("Matt. 9:36; Matt 15:32;23:37; Luke 7:13"), [
+		r("Matt. 9:36", "Matthew", 9, 36),
+		r("Matt 15:32", "Matthew", 15, 32),
+		r("23:37", "Matthew", 23, 37),
+		r("Luke 7:13", "Luke", 7, 13),
+	]);
+});
+
+test("dotted book abbreviations are detected, with the raw dot", () => {
+	const r = (raw, book, c, v, ce = c, ve = v) => [raw, book, c, v, ce, ve];
+	assert.deepEqual(tuples("Gen. 1:27"), [r("Gen. 1:27", "Genesis", 1, 27)]);
+	assert.deepEqual(tuples("see 1 Cor. 12:8"), [r("1 Cor. 12:8", "1 Corinthians", 12, 8)]);
+	assert.deepEqual(tuples("Matt. 5:3-12"), [r("Matt. 5:3-12", "Matthew", 5, 3, 5, 12)]);
+	assert.deepEqual(tuples("Ps. 23:1"), [r("Ps. 23:1", "Psalms", 23, 1)]);
+	assert.deepEqual(tuples("2 Thess. 3:10"), [r("2 Thess. 3:10", "2 Thessalonians", 3, 10)]);
+	assert.deepEqual(tuples("Rom. 8:28; 10:9"), [r("Rom. 8:28", "Romans", 8, 28), r("10:9", "Romans", 10, 9)]);
+});
+
+test("is, am and mr never make a dotted reference", () => {
+	assert.deepEqual(tuples("Mr. 5:30 said"), []);
+	assert.deepEqual(tuples("I am. 10:30 we start"), []);
+	assert.deepEqual(tuples("It is. 3:16 is"), []);
+	assert.deepEqual(tuples("Is. 5:3 and Am. 4:2"), []);
+});
+
+test("verse-only references need exactly one passage", () => {
+	assert.deepEqual(tuples("in him (v.11)"), []);
+	assert.deepEqual(tuples("in him (v.11)", []), []);
+	assert.deepEqual(tuples("in him (v.11)", [...COL, ...COL]), []);
+});
+
+test("verse-only shapes resolve against the passage", () => {
+	const text = "(v.11) v. 10 vv. 14-15 vv.14–15 v.11-12 (v10) vv5–6 v 19 v.12's v.15; Mark 3:27";
+	const rows = tuples(text, COL);
+	assert.equal(rows.length, 11);
+	assert.deepEqual(rows.map((r) => r[0]), [
+		"v.11", "v. 10", "vv. 14-15", "vv.14–15", "v.11-12", "v10", "vv5–6", "v 19", "v.12", "v.15", "Mark 3:27",
+	]);
+	for (const row of rows.slice(0, 10)) {
+		assert.equal(row[1], "Colossians");
+		assert.equal(row[2], 2);
+		assert.equal(row[4], 2);
+	}
+	assert.deepEqual(rows[2], ["vv. 14-15", "Colossians", 2, 14, 2, 15]);
+	assert.deepEqual(rows[10], ["Mark 3:27", "Mark", 3, 27, 3, 27]);
+});
+
+test("hostile verse-only text yields nothing", () => {
+	for (const t of ["Roe v. Wade", "V. 3 reasons", "IV. 3 things", "Rev 5", "Lev. 19", "v2.0 of the plan",
+		"Smith v. 3M", "vs. 5", "vs 5", "dev 10", "v.3:16", "verse 12", "V8 engine"]) {
+		assert.deepEqual(tuples(t, COL), [], t);
+	}
+	assert.deepEqual(tuples("Rev 5:1 v.2", COL), [
+		["Rev 5:1", "Revelation", 5, 1, 5, 1],
+		["v.2", "Colossians", 2, 2, 2, 2],
+	]);
+});
+
+test("verse-only chapter resolution across a two-chapter passage", () => {
+	const rows = tuples("v.24 vv.25-28 v.29 v.2 v.3 v.23 v4 v.10", passage("Colossians", 1, 24, 2, 3));
+	assert.deepEqual(rows, [
+		["v.24", "Colossians", 1, 24, 1, 24],
+		["vv.25-28", "Colossians", 1, 25, 1, 28],
+		["v.29", "Colossians", 1, 29, 1, 29],
+		["v.2", "Colossians", 2, 2, 2, 2],
+		["v.3", "Colossians", 2, 3, 2, 3],
+	]);
+	assert.deepEqual(tuples("v.18 v.17 v.20 v.21", passage("John", 3, 16, 4, 20)), [["v.21", "John", 3, 21, 3, 21]]);
+	assert.deepEqual(tuples("v.5", passage("Genesis", 1, 1, 3, 5)), []);
+	assert.deepEqual(tuples("v.5", passage("Amos", 1, 1, 2, Infinity)), []);
+	assert.deepEqual(tuples("v.5", passage("Amos", 4, 1, 4, Infinity)), [["v.5", "Amos", 4, 5, 4, 5]]);
+});
+
+test("notePassages reads the passage key in its accepted shapes", () => {
+	const t = (fm) => notePassages(fm).map((r) => [r.raw, r.book, r.chapter, r.verseStart, r.chapterEnd, r.verseEnd]);
+	assert.deepEqual(t({ passage: ["[[Colossians 2:11-15]]"] }), [["Colossians 2:11-15", "Colossians", 2, 11, 2, 15]]);
+	assert.deepEqual(t({ passage: "John 3:16-21" }), [["John 3:16-21", "John", 3, 16, 3, 21]]);
+	assert.deepEqual(t({ passage: "[[30_Knowledge/Theology/Bible/CSB/Romans/Rom 8|Romans 8:28]]" }), [["Romans 8:28", "Romans", 8, 28, 8, 28]]);
+	assert.deepEqual(t({ passage: ["[[Col 2|Colossians 2:14-15]]"] }), [["Colossians 2:14-15", "Colossians", 2, 14, 2, 15]]);
+	assert.deepEqual(t({ passage: ["[[Amos 4]]"] }), [["Amos 4", "Amos", 4, 1, 4, Infinity]]);
+	assert.deepEqual(t({ passage: "[[Bible/CSB/Romans/Rom 11|Romans 11]]" }), [["Romans 11", "Romans", 11, 1, 11, Infinity]]);
+	assert.deepEqual(t({ passage: "Matthew 5–7" }), [["Matthew 5–7", "Matthew", 5, 1, 7, Infinity]]);
+	assert.deepEqual(t({ passage: "Deut 30:6; 10:16" }), [
+		["Deut 30:6", "Deuteronomy", 30, 6, 30, 6],
+		["10:16", "Deuteronomy", 10, 16, 10, 16],
+	]);
+	assert.deepEqual(t({ passage: ["[[Amos 1]]", "[[Amos 2]]", 7, null, "", "Revelation", "[[Love]]"] }), [
+		["Amos 1", "Amos", 1, 1, 1, Infinity],
+		["Amos 2", "Amos", 2, 1, 2, Infinity],
+	]);
+});
+
+test("notePassages returns nothing for anything else", () => {
+	for (const fm of [undefined, null, {}, { passage: null }, { passage: 42 }, { passage: [["John 3:16"]] },
+		{ Passage: "John 3:16" }, { scripture: "John 3:16" }, "John 3:16"]) {
+		assert.deepEqual(notePassages(fm), [], JSON.stringify(fm));
+	}
+});
+
+/** A chapter file with exactly the listed verses. */
+function gappyChapter(n, verses) {
+	let out = `# Chapter ${n}\n`;
+	for (const v of verses) out += `\n###### ${v}\nc${n}v${v} text\n`;
+	return out;
+}
+const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
+const without = (list, ...skip) => list.filter((v) => !skip.includes(v));
+const keys = (rows) => rows.map((r) => `${r.chapter}:${r.verse}`);
+
+test("verses omitted inside a range are skipped, at the edges they still fail", async () => {
+	const app = fakeApp({
+		"B7/Mark/Mark 9.md": gappyChapter(9, without(range(1, 50), 44, 46)),
+		"B7/Mark/Mark 10.md": gappyChapter(10, range(1, 52)),
+		"B7/Matthew/Matt 17.md": gappyChapter(17, without(range(1, 27), 21)),
+	});
+	const mark = (raw, verseStart, chapterEnd, verseEnd) =>
+		({ raw, book: "Mark", chapter: 9, verseStart, chapterEnd, verseEnd });
+	assert.deepEqual(keys(await fetchVerses(app, "B7", mark("Mark 9:43-48", 43, 9, 48))), ["9:43", "9:45", "9:47", "9:48"]);
+	assert.deepEqual(keys(await fetchVerses(app, "B7", mark("Mark 9:49-10:1", 49, 10, 1))), ["9:49", "9:50", "10:1"]);
+	assert.deepEqual(keys(await fetchVerses(app, "B7", mark("Mark 9:44-46", 44, 9, 46))), ["9:45"]);
+	assert.deepEqual(
+		keys(await fetchVerses(app, "B7", ref({ book: "Matthew", chapter: 17, verseStart: 14, chapterEnd: 17, verseEnd: 21 }))),
+		range(14, 20).map((v) => `17:${v}`),
+	);
+	await assert.rejects(fetchVerses(app, "B7", mark("Mark 9:44", 44, 9, 44)), /^Error: Passage not found: Mark 9:44$/);
+	await assert.rejects(fetchVerses(app, "B7", mark("Mark 9:0-2", 0, 9, 2)), /Passage not found/);
+	await assert.rejects(fetchVerses(app, "B7", mark("Mark 9:48-51", 48, 9, 51)), /Passage not found/);
+});
+
+test("verseEnd Infinity reads to the end of the last chapter", async () => {
+	const app = fakeApp({
+		"B8/Amos/Amos 4.md": gappyChapter(4, range(1, 13)),
+		"B8/Matthew/Matt 5.md": gappyChapter(5, range(1, 3)),
+		"B8/Matthew/Matt 6.md": gappyChapter(6, range(1, 2)),
+		"B8/Matthew/Matt 7.md": gappyChapter(7, range(1, 2)),
+	});
+	const amos = await fetchVerses(app, "B8", ref({ book: "Amos", chapter: 4, verseStart: 1, chapterEnd: 4, verseEnd: Infinity }));
+	assert.equal(amos.length, 13);
+	const matt = await fetchVerses(app, "B8", ref({ book: "Matthew", chapter: 5, verseStart: 1, chapterEnd: 7, verseEnd: Infinity }));
+	assert.deepEqual(keys(matt), ["5:1", "5:2", "5:3", "6:1", "6:2", "7:1", "7:2"]);
+	await assert.rejects(
+		fetchVerses(app, "B8", ref({ book: "Amos", chapter: 9, verseStart: 1, chapterEnd: 9, verseEnd: Infinity })),
+		/Passage not found/,
+	);
 });

@@ -187,7 +187,7 @@ export interface ScriptureRef {
 	verseStart: number;
 	/** End chapter (same as chapter unless the range crosses chapters). */
 	chapterEnd: number;
-	/** End verse (same as start for single verse), in chapterEnd. */
+	/** End verse (same as start for single verse), in chapterEnd. Infinity means "to the end of chapterEnd" (a whole-chapter passage from frontmatter). */
 	verseEnd: number;
 }
 
@@ -195,17 +195,20 @@ export interface ScriptureRef {
  * Regex for scripture references.
  * Captures:
  *   group 1: book name (possibly "1 Cor", "Matthew", etc.)
- *   group 2: chapter
- *   group 3: start verse
- *   group 4: (optional) end verse after hyphen, or end chapter if group 5 follows
- *   group 5: (optional) end verse of a cross-chapter range, "John 3:16-4:2"
+ *   group 2: (optional) the dot of an abbreviation, "Rom."
+ *   group 3: chapter
+ *   group 4: start verse
+ *   group 5: (optional) end verse after a dash, or end chapter if group 6 follows
+ *   group 6: (optional) end verse of a cross-chapter range, "John 3:16-4:2"
  *
  * Handles:
  *   - Numbered books: "1 Cor", "1Cor", "2 John"
  *   - Full names: "Matthew", "John", "Romans"
  *   - Names joined by "of": "Song of Solomon", "Song of Songs"
- *   - Verse ranges: "John 3:16-18"
+ *   - Verse ranges: "John 3:16-18", "Rom 8:28–30" (hyphen or en dash)
  *   - Cross-chapter ranges: "John 3:16-4:2", "Gen 1:1-3:5"
+ *   - Dotted abbreviations: "Rom. 8:28", "1 Cor. 12:8"
+ *   - List continuations that inherit the book: "Deut 30:6; 10:16" (see CONTINUATION_REGEX)
  *   - No verse (chapter only): not supported for now
  *
  * The optional "of" matters: without it the book name could only be one or two
@@ -215,10 +218,45 @@ export interface ScriptureRef {
  * unreachable from real sermon text.
  */
 const SCRIPTURE_REGEX =
-	/\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+)(?::(\d+))?)?/g;
+	/\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)(\.)?\s+(\d+):(\d+)(?:[-–](\d+)(?::(\d+))?)?/g;
 
-export function parseReferences(text: string): (ScriptureRef & { index: number; length: number })[] {
-	const results: (ScriptureRef & { index: number; length: number })[] = [];
+/** "; 10:16" or ", 10:30-33" straight after a reference. Sticky: it only matches at lastIndex. */
+const CONTINUATION_REGEX =
+	/[;,]\s?(\d{1,3}):(\d{1,3})(?:[-–](\d{1,3})(?::(\d{1,3}))?)?\b(?!\s?[ap]\.?m\b)/iy;
+
+/** "v.11", "vv. 14-15", "v11". Lowercase only; see the spec for what each guard rejects. */
+const VERSE_ONLY_REGEX = /\bvv?(?:\.\s?|\s)?(\d{1,3})(?:[-–](\d{1,3}))?\b(?![:.]\d)/g;
+
+/** Frontmatter only: "Amos 4", "Matthew 5–7". */
+const CHAPTER_ONLY_REGEX = /^(.+?)\s+(\d{1,3})(?:\s?[-–]\s?(\d{1,3}))?$/;
+
+/** Book tokens that are also English words or a title, so "Is. 5" and "Mr. 5" are not references. */
+const DOTTED_EXCLUDED = ["is", "am", "mr"];
+
+/**
+ * Which chapter a bare verse number means, given the note's passage, or null
+ * when it can't be told. Single chapter: that chapter. Two chapters: at or
+ * after the first verse means the first, at or before the last verse means the
+ * second, and neither or both is ambiguous. Three or more: ambiguous.
+ */
+function verseChapter(p: ScriptureRef, n: number): number | null {
+	if (p.chapterEnd === p.chapter) return p.chapter;
+	if (p.chapterEnd !== p.chapter + 1) return null;
+	const inFirst = n >= p.verseStart;
+	const inLast = n <= p.verseEnd;
+	if (inFirst === inLast) return null;
+	return inFirst ? p.chapter : p.chapterEnd;
+}
+
+type ParsedRef = ScriptureRef & { index: number; length: number };
+
+/**
+ * Detect references in text. With exactly one passage (the note's), also
+ * detects verse-only references ("v.11") resolved against it. Results are in
+ * ascending index order and never overlap.
+ */
+export function parseReferences(text: string, passages: ScriptureRef[] = []): ParsedRef[] {
+	const results: ParsedRef[] = [];
 	SCRIPTURE_REGEX.lastIndex = 0;
 	let m: RegExpExecArray | null;
 
@@ -244,11 +282,12 @@ export function parseReferences(text: string): (ScriptureRef & { index: number; 
 			}
 		}
 		if (book === null) continue;
+		if (m[2] && DOTTED_EXCLUDED.includes(words[words.length - 1].toLowerCase())) continue;
 
-		const chapter = parseInt(m[2], 10);
-		const verseStart = parseInt(m[3], 10);
-		const chapterEnd = m[5] ? parseInt(m[4], 10) : chapter;
-		const verseEnd = m[5] ? parseInt(m[5], 10) : m[4] ? parseInt(m[4], 10) : verseStart;
+		const chapter = parseInt(m[3], 10);
+		const verseStart = parseInt(m[4], 10);
+		const chapterEnd = m[6] ? parseInt(m[5], 10) : chapter;
+		const verseEnd = m[6] ? parseInt(m[6], 10) : m[5] ? parseInt(m[5], 10) : verseStart;
 
 		// Trim any absorbed prefix off the match, so the highlighted span covers
 		// the reference itself and not the word before it.
@@ -262,9 +301,80 @@ export function parseReferences(text: string): (ScriptureRef & { index: number; 
 			index: m.index + offset,
 			length: m[0].length - offset,
 		});
+
+		// List continuations ("; 10:16") inherit the book. Chain until one fails.
+		let pos = m.index + m[0].length;
+		for (;;) {
+			CONTINUATION_REGEX.lastIndex = pos;
+			const c = CONTINUATION_REGEX.exec(text);
+			if (c === null) break;
+			const raw = c[0].slice(c[0].search(/\d/));
+			const cChapter = parseInt(c[1], 10);
+			const cStart = parseInt(c[2], 10);
+			results.push({
+				raw,
+				book,
+				chapter: cChapter,
+				verseStart: cStart,
+				chapterEnd: c[4] ? parseInt(c[3], 10) : cChapter,
+				verseEnd: c[4] ? parseInt(c[4], 10) : c[3] ? parseInt(c[3], 10) : cStart,
+				index: pos + c[0].length - raw.length,
+				length: raw.length,
+			});
+			pos += c[0].length;
+		}
+		SCRIPTURE_REGEX.lastIndex = pos;
+	}
+
+	if (passages.length === 1) {
+		const passage = passages[0];
+		VERSE_ONLY_REGEX.lastIndex = 0;
+		while ((m = VERSE_ONLY_REGEX.exec(text)) !== null) {
+			const verseStart = parseInt(m[1], 10);
+			const chapter = verseChapter(passage, verseStart);
+			if (chapter === null) continue;
+			results.push({
+				raw: m[0],
+				book: passage.book,
+				chapter,
+				verseStart,
+				chapterEnd: chapter,
+				verseEnd: m[2] ? parseInt(m[2], 10) : verseStart,
+				index: m.index,
+				length: m[0].length,
+			});
+		}
+		results.sort((a, b) => a.index - b.index);
 	}
 
 	return results;
+}
+
+/**
+ * The passage(s) a note names in its `passage` frontmatter key: a string or a
+ * list of strings, each optionally a wikilink (its display text is used).
+ * Whole chapters ("Amos 4", "Matthew 5–7") come back with verseEnd Infinity.
+ */
+export function notePassages(frontmatter: unknown): ScriptureRef[] {
+	if (typeof frontmatter !== "object" || frontmatter === null) return [];
+	const value = (frontmatter as Record<string, unknown>)["passage"];
+	const entries: unknown[] = Array.isArray(value) ? value : [value];
+	const refs: ScriptureRef[] = [];
+	for (const entry of entries) {
+		if (typeof entry !== "string") continue;
+		const text = (entry.replace(/^\s*\[\[|\]\]\s*$/g, "").split("|").pop() ?? "").trim();
+		const found = parseReferences(text);
+		if (found.length > 0) {
+			refs.push(...found);
+			continue;
+		}
+		const m = CHAPTER_ONLY_REGEX.exec(text);
+		const book = m ? normaliseBook(m[1]) : null;
+		if (m === null || book === null) continue;
+		const chapter = parseInt(m[2], 10);
+		refs.push({ raw: text, book, chapter, verseStart: 1, chapterEnd: m[3] ? parseInt(m[3], 10) : chapter, verseEnd: Infinity });
+	}
+	return refs;
 }
 
 // ---------------------------------------------------------------------------
@@ -582,7 +692,8 @@ async function loadChapter(
  * Fetch verse text for a reference. Returns an array of { chapter, verse, text }
  * entries, in reading order. A cross-chapter range runs from the start verse to
  * the end of the first chapter, through any whole chapters between, then from
- * verse 1 to the end verse of the last chapter.
+ * verse 1 to the end verse of the last chapter (verseEnd Infinity: to the end
+ * of it). Verses inside a chapter's range that the translation omits are skipped.
  * Throws a user-readable string on error.
  */
 export async function fetchVerses(
@@ -598,15 +709,16 @@ export async function fetchVerses(
 		const map = await loadChapter(app, csbFolder, ref.book, c);
 		if (!map) throw notFound();
 
+		const max = Math.max(...map.keys());
 		const first = c === ref.chapter ? ref.verseStart : 1;
-		const last = c === ref.chapterEnd ? ref.verseEnd : Math.max(...map.keys());
-		if (last < first) throw notFound();
+		const last = c === ref.chapterEnd && ref.verseEnd !== Infinity ? ref.verseEnd : max;
+		if (first < 1 || last < first || last > max) throw notFound();
 		for (let v = first; v <= last; v++) {
 			const text = map.get(v);
-			if (text === undefined) throw notFound();
-			results.push({ chapter: c, verse: v, text });
+			if (text) results.push({ chapter: c, verse: v, text });
 		}
 	}
+	if (results.length === 0) throw notFound();
 
 	return results;
 }
@@ -617,6 +729,7 @@ export class ScriptureExpander {
 	private csbFolder: string;
 	private component: Component;
 	private sourcePath: string;
+	private passages: ScriptureRef[] = [];
 
 	/** Track which refs are currently expanded: span element -> expanded div. */
 	private expanded = new Map<HTMLElement, HTMLElement>();
@@ -634,6 +747,10 @@ export class ScriptureExpander {
 
 	updateSourcePath(sourcePath: string): void {
 		this.sourcePath = sourcePath;
+	}
+
+	updatePassages(passages: ScriptureRef[]): void {
+		this.passages = passages;
 	}
 
 	/**
@@ -661,7 +778,7 @@ export class ScriptureExpander {
 
 		if (node.nodeType === Node.TEXT_NODE) {
 			const text = node.textContent ?? "";
-			const refs = parseReferences(text);
+			const refs = parseReferences(text, this.passages);
 			if (refs.length === 0) return;
 
 			// Build replacement fragment
@@ -744,40 +861,7 @@ export class ScriptureExpander {
 			expandEl.empty();
 			expandEl.className = "preach-scripture-expand";
 
-			// Render all verses as a single flowing paragraph.
-			// Each verse gets an inline superscript number; no block breaks between verses.
-			const passageEl = expandEl.createSpan({ cls: "preach-scripture-passage" });
-
-			let prevChapter = ref.chapter;
-			for (const { chapter, verse, text } of verses) {
-				// Superscript verse number; "C:V" where the chapter changes
-				const label = chapter !== prevChapter ? `${chapter}:${verse}` : String(verse);
-				prevChapter = chapter;
-				passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: label });
-
-				// Render verse text into a temp container, then lift child nodes inline.
-				// MarkdownRenderer wraps plain text in <p>; unwrap to keep flow continuous.
-				const tmp = createDiv();
-				await MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
-
-				// Snapshot first: appending moves nodes out of tmp, and childNodes
-				// is live, so iterating it directly would skip every second node.
-				const nodes = Array.from(tmp.childNodes);
-				for (const node of nodes) {
-					if (node.instanceOf(HTMLElement) && node.tagName === "P") {
-						// Unwrap the paragraph so verses stay on one flowing line.
-						// Array.from, not a spread: tsconfig's lib is ES6 plus DOM
-						// without dom.iterable, so a NodeList is array-like here
-						// but not iterable. It also snapshots before the move.
-						passageEl.append(...Array.from(node.childNodes));
-					} else {
-						passageEl.append(node);
-					}
-				}
-
-				// Space between verses
-				passageEl.appendText(" ");
-			}
+			await this.renderVerses(expandEl, ref.chapter, verses);
 
 			// Tap on the expansion itself collapses it
 			expandEl.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -798,6 +882,63 @@ export class ScriptureExpander {
 				this.expanded.delete(span);
 				span.classList.remove("preach-scripture-ref--open");
 			});
+		}
+	}
+
+	/**
+	 * Render verses as one flowing paragraph into el.
+	 * Each verse gets an inline superscript number; no block breaks between verses.
+	 */
+	private async renderVerses(
+		el: HTMLElement,
+		firstChapter: number,
+		verses: { chapter: number; verse: number; text: string }[]
+	): Promise<void> {
+		const passageEl = el.createSpan({ cls: "preach-scripture-passage" });
+
+		let prevChapter = firstChapter;
+		for (const { chapter, verse, text } of verses) {
+			// Superscript verse number; "C:V" where the chapter changes
+			const label = chapter !== prevChapter ? `${chapter}:${verse}` : String(verse);
+			prevChapter = chapter;
+			passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: label });
+
+			// Render verse text into a temp container, then lift child nodes inline.
+			// MarkdownRenderer wraps plain text in <p>; unwrap to keep flow continuous.
+			const tmp = createDiv();
+			await MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
+
+			// Snapshot first: appending moves nodes out of tmp, and childNodes
+			// is live, so iterating it directly would skip every second node.
+			const nodes = Array.from(tmp.childNodes);
+			for (const node of nodes) {
+				if (node.instanceOf(HTMLElement) && node.tagName === "P") {
+					// Unwrap the paragraph so verses stay on one flowing line.
+					// Array.from, not a spread: tsconfig's lib is ES6 plus DOM
+					// without dom.iterable, so a NodeList is array-like here
+					// but not iterable. It also snapshots before the move.
+					passageEl.append(...Array.from(node.childNodes));
+				} else {
+					passageEl.append(node);
+				}
+			}
+
+			// Space between verses
+			passageEl.appendText(" ");
+		}
+	}
+
+	async renderPassage(el: HTMLElement, passages: ScriptureRef[]): Promise<void> {
+		el.empty();
+		for (const ref of passages) {
+			el.createDiv({ cls: "preach-passage-ref", text: ref.raw });
+			const textEl = el.createDiv({ cls: "preach-passage-text" });
+			try {
+				await this.renderVerses(textEl, ref.chapter, await fetchVerses(this.app, this.csbFolder, ref));
+			} catch (err: unknown) {
+				const msg = err instanceof Error ? err.message : `Could not load ${ref.raw}`;
+				textEl.createSpan({ cls: "preach-scripture-error-text", text: msg });
+			}
 		}
 	}
 

@@ -12,7 +12,7 @@ import { PreachTimer } from "./timer";
 import type { TimerThresholds } from "./timer";
 import { noteTargetMinutes } from "./settings";
 import { HighlightManager, parseBlocks } from "./highlight";
-import { ScriptureExpander } from "./scripture";
+import { ScriptureExpander, notePassages, type ScriptureRef } from "./scripture";
 import { FormatManager, PreachFormatToolbar } from "./format";
 
 export const PREACH_VIEW_TYPE = "preach-md-view";
@@ -70,6 +70,11 @@ export class PreachView extends ItemView {
 	private exitBtn!: HTMLElement;
 	private editBtn!: HTMLElement;
 	private bottomBtns!: HTMLElement;
+	private passageBtn!: HTMLElement;
+	private passageEl!: HTMLElement;
+	private passageBodyEl!: HTMLElement;
+	private passages: ScriptureRef[] = [];
+	private passageBuilt = false;
 	private overlayEl!: HTMLElement;
 	private exitChip!: HTMLElement;
 
@@ -197,9 +202,12 @@ export class PreachView extends ItemView {
 
 		// Frontmatter lands in the metadata cache after the modify event
 		this.registerEvent(
-			this.app.metadataCache.on("changed", (changed) => {
+			this.app.metadataCache.on("changed", (changed, _data, cache) => {
 				if (this.file && changed.path === this.file.path) {
 					this.timer.updateThresholds(this.timerThresholds());
+					if (JSON.stringify(notePassages(cache.frontmatter)) !== JSON.stringify(this.passages)) {
+						void this.renderFile(this.file);
+					}
 				}
 			})
 		);
@@ -303,8 +311,11 @@ export class PreachView extends ItemView {
 		// Bottom buttons container - three floating icon-only buttons, auto-fade
 		this.bottomBtns = root.createDiv({ cls: "preach-bottom-btns" });
 
-		// Outline button - bottom-left
-		this.outlineBtn = this.bottomBtns.createEl("button", {
+		// Bottom-left group: outline + passage
+		const leftGroup = this.bottomBtns.createDiv({ cls: "preach-bottom-left" });
+
+		// Outline button
+		this.outlineBtn = leftGroup.createEl("button", {
 			cls: "preach-corner-btn preach-corner-btn--outline",
 			attr: { "aria-label": "Outline", title: "Outline" },
 		});
@@ -318,6 +329,23 @@ export class PreachView extends ItemView {
 			e.stopPropagation();
 			this.resetIdleTimer();
 			this.toggleOutline();
+		});
+
+		// Passage button - shown only when the note has a passage
+		this.passageBtn = leftGroup.createEl("button", {
+			cls: "preach-corner-btn",
+			attr: { "aria-label": "Show passage", title: "Passage" },
+		});
+		const passageSvg = this.passageBtn.createSvg("svg", {
+			attr: { xmlns: "http://www.w3.org/2000/svg", width: "20", height: "20", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" },
+		});
+		passageSvg.createSvg("path", { attr: { d: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" } });
+		passageSvg.createSvg("path", { attr: { d: "M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" } });
+		this.passageBtn.toggle(false);
+		this.passageBtn.addEventListener("pointerdown", (e: PointerEvent) => {
+			e.stopPropagation();
+			this.resetIdleTimer();
+			this.togglePassage();
 		});
 
 		// Text size: A- / A+ in the bottom centre
@@ -383,6 +411,14 @@ export class PreachView extends ItemView {
 
 		// Wire the highlight manager to its content area (button removed)
 		this.highlightManager.init(null, this.scrollEl, this.scrollEl);
+
+		// Passage overlay: a sibling of scrollEl, so the sermon never moves under it
+		this.passageEl = root.createDiv({
+			cls: "preach-passage-overlay preach-passage-overlay--hidden",
+		});
+		this.passageBodyEl = this.passageEl.createDiv({ cls: "preach-passage-body" });
+		this.passageEl.addEventListener("click", () => this.closePassage());
+		this.passageEl.addEventListener("scroll", () => this.resetIdleTimer());
 
 		// Outline overlay (hidden by default)
 		this.overlayEl = root.createDiv({
@@ -498,6 +534,14 @@ export class PreachView extends ItemView {
 
 		// Scripture detection pass
 		this.scriptureExpander.updateSourcePath(file.path);
+		const passages = notePassages(this.app.metadataCache.getFileCache(file)?.frontmatter);
+		if (JSON.stringify(passages) !== JSON.stringify(this.passages)) {
+			this.closePassage();
+			this.passageBuilt = false;
+		}
+		this.passages = passages;
+		this.passageBtn.toggle(passages.length > 0);
+		this.scriptureExpander.updatePassages(passages);
 		this.scriptureExpander.processElement(body);
 
 		// Tag headings so outline works
@@ -563,6 +607,7 @@ export class PreachView extends ItemView {
 					e.stopPropagation();
 					el.scrollIntoView({ behavior: "smooth", block: "start" });
 					this.closeOutline();
+					this.closePassage();
 				});
 			});
 		}
@@ -572,6 +617,24 @@ export class PreachView extends ItemView {
 
 	private closeOutline(): void {
 		this.overlayEl.classList.add("preach-outline-overlay--hidden");
+	}
+
+	// Passage overlay controls
+	private togglePassage(): void {
+		if (!this.passageEl.classList.contains("preach-passage-overlay--hidden")) {
+			this.closePassage();
+			return;
+		}
+		if (!this.passageBuilt) {
+			this.passageBuilt = true;
+			void this.scriptureExpander.renderPassage(this.passageBodyEl, this.passages);
+		}
+		this.passageEl.classList.remove("preach-passage-overlay--hidden");
+	}
+
+	private closePassage(): void {
+		this.passageEl.classList.add("preach-passage-overlay--hidden");
+		this.resetIdleTimer();
 	}
 
 	// Exit two-step confirmation
