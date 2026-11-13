@@ -2,18 +2,50 @@
 // Provides bold, italic, underline, and highlight wrapping applied directly
 // to the source file from selected text in the preach view.
 
-import { App, TFile } from "obsidian";
+import { App, Component, MarkdownRenderer, TFile } from "obsidian";
 import type { Block, Snapshot } from "./blocks";
 
 export interface FormatWrapper {
 	open: string;
 	close: string;
+	/** The element Obsidian renders this wrapper as. */
+	tag: string;
+	/** For `mark`: the expected data-highlight value, "" for a plain highlight. */
+	colour?: string;
 }
 
-export const FORMAT_BOLD: FormatWrapper = { open: "**", close: "**" };
-export const FORMAT_ITALIC: FormatWrapper = { open: "*", close: "*" };
-export const FORMAT_UNDERLINE: FormatWrapper = { open: "<u>", close: "</u>" };
-export const FORMAT_HIGHLIGHT: FormatWrapper = { open: "==", close: "==" };
+export const FORMAT_BOLD: FormatWrapper = { open: "**", close: "**", tag: "strong" };
+export const FORMAT_ITALIC: FormatWrapper = { open: "*", close: "*", tag: "em" };
+export const FORMAT_UNDERLINE: FormatWrapper = { open: "<u>", close: "</u>", tag: "u" };
+export const FORMAT_HIGHLIGHT: FormatWrapper = { open: "==", close: "==", tag: "mark", colour: "" };
+
+// ponytail: a word that occurs more than this many times in one block refuses to format; raise it if that bites, each candidate costs one render.
+const MAX_CANDIDATES = 12;
+
+/** Every edit that wraps one occurrence of `sel` in `src`, in source order. */
+export function wrapCandidates(src: string, sel: string, open: string, close: string): string[] {
+	const edits: string[] = [];
+	for (let i = src.indexOf(sel); i !== -1; i = src.indexOf(sel, i + 1)) {
+		edits.push(src.slice(0, i) + open + sel + close + src.slice(i + sel.length));
+		if (edits.length > MAX_CANDIDATES) return [];
+	}
+	return edits;
+}
+
+const textOffset = (root: Node, node: Node, offset: number): number => {
+	const r = (root.ownerDocument ?? document).createRange();
+	r.setStart(root, 0);
+	r.setEnd(node, offset);
+	return r.toString().length;
+};
+
+const span = (root: Node, el: Element): [number, number] => {
+	const start = textOffset(root, el, 0);
+	return [start, start + (el.textContent ?? "").length];
+};
+
+const isTarget = (el: Element, w: FormatWrapper): boolean =>
+	w.tag !== "mark" || (el.getAttribute("data-highlight") ?? "") === (w.colour ?? "");
 
 /** Result returned by captureFromSelection. */
 export interface CaptureResult {
@@ -35,9 +67,9 @@ export type FormatFailReason =
  * error, and no key can resolve through Object.prototype.
  */
 const FORMAT_FAIL_MESSAGE: Record<FormatFailReason, string> = {
-	"scripture-expand": "Can't format inside an expanded passage.",
+	"scripture-expand": "Close the open passage before formatting.",
 	"cross-block": "Can't format across two paragraphs.",
-	"not-found": "Can't find that text in the note source.",
+	"not-found": "Can't match that text to the note source.",
 	collision: "That text is already formatted.",
 	stale: "The note is updating. Try again in a moment.",
 };
@@ -48,7 +80,14 @@ export class FormatManager {
 	private snapshot: Snapshot | null = null;
 
 	// The selection captured on pointerdown (before focus changes clear it)
-	private capturedSelection: { text: string; snapshot: Snapshot; block: Block } | null = null;
+	private capturedSelection: {
+		snapshot: Snapshot;
+		block: Block;
+		text: string;
+		a: number;
+		b: number;
+		rect: DOMRect;
+	} | null = null;
 
 	// Reused notice element
 	private noticeEl: HTMLElement | null = null;
@@ -87,153 +126,112 @@ export class FormatManager {
 		const range = sel.getRangeAt(0);
 		if (!bodyEl.contains(range.commonAncestorContainer)) return null;
 
-		// Bail if selection is inside a scripture expansion
-		let node: Node | null = sel.anchorNode;
-		while (node) {
-			if (node.instanceOf(HTMLElement)) {
-				if (node.classList.contains("preach-scripture-expand")) {
-					this.showFormatFailNotice("scripture-expand", range.getBoundingClientRect());
-					return null;
-				}
-			}
-			node = node.parentNode;
-		}
-
-		// Walk anchor node up to find .preach-block
-		let blockEl: HTMLElement | null = null;
-		node = sel.anchorNode;
-		while (node) {
-			if (node.instanceOf(HTMLElement) && node.classList.contains("preach-block")) {
-				blockEl = node;
-				break;
-			}
-			node = node.parentNode;
-		}
-
-		if (!blockEl) return null;
-
-		// Check selection doesn't span multiple preach-blocks
-		let focusBlockEl: HTMLElement | null = null;
-		let fn: Node | null = sel.focusNode;
-		while (fn) {
-			if (fn.instanceOf(HTMLElement) && fn.classList.contains("preach-block")) {
-				focusBlockEl = fn;
-				break;
-			}
-			fn = fn.parentNode;
-		}
-		if (focusBlockEl !== blockEl) {
-			this.showFormatFailNotice("cross-block", range.getBoundingClientRect());
-			return null;
-		}
-
-		const blockIndex = parseInt(blockEl.dataset.blockIndex ?? "", 10);
-
-		const block = this.snapshot?.blocks[blockIndex];
-		if (!this.snapshot || !block) {
-			this.showFormatFailNotice("stale", range.getBoundingClientRect());
-			return null;
-		}
-		const snapshot = this.snapshot;
-
-		const sourceContent = snapshot.text.slice(block.start, block.end);
-
-		// Try to find selected text in source block
-		let sourceIdx = sourceContent.indexOf(selectedText);
-
-		if (sourceIdx === -1) {
-			// Fuzzy fallback: strip common markdown markers from source before searching.
-			const stripped = sourceContent.replace(/[*_~=<>/]/g, "");
-			const strippedIdx = stripped.indexOf(selectedText);
-			if (strippedIdx !== -1) {
-				// Map the stripped index back to source index
-				let srcPos = 0;
-				let strippedCount = 0;
-				while (srcPos < sourceContent.length && strippedCount < strippedIdx) {
-					if (!/[*_~=<>/]/.test(sourceContent[srcPos])) strippedCount++;
-					srcPos++;
-				}
-				sourceIdx = srcPos;
-			}
-		}
-
-		if (sourceIdx === -1) {
-			this.showFormatFailNotice("not-found", range.getBoundingClientRect());
-			return null;
-		}
-
-		// Collision check: is this position already inside an existing wrapper?
-		const before = sourceContent.slice(0, sourceIdx);
-		const after = sourceContent.slice(sourceIdx + selectedText.length);
-		const wrappers = ["**", "*", "==", "<u>"];
-		for (const w of wrappers) {
-			if (before.endsWith(w) && after.startsWith(w === "**" ? "**" : w === "*" ? "*" : w === "==" ? "==" : "</u>")) {
-				this.showFormatFailNotice("collision", range.getBoundingClientRect());
-				return null;
-			}
-		}
-
-		this.capturedSelection = { text: selectedText, snapshot, block };
-
 		const rect = range.getBoundingClientRect();
+
+		const blockOf = (n: Node): HTMLElement | null => {
+			for (let c: Node | null = n; c; c = c.parentNode) {
+				if (c.instanceOf(HTMLElement) && c.classList.contains("preach-block")) return c;
+			}
+			return null;
+		};
+		const blockEl = blockOf(range.startContainer);
+		if (!blockEl) return null;
+		if (blockOf(range.endContainer) !== blockEl) {
+			this.showFormatFailNotice("cross-block", rect);
+			return null;
+		}
+
+		if (blockEl.querySelector(".preach-scripture-expand")) {
+			this.showFormatFailNotice("scripture-expand", rect);
+			return null;
+		}
+
+		const block = this.snapshot?.blocks[parseInt(blockEl.dataset.blockIndex ?? "", 10)];
+		if (!this.snapshot || !block) {
+			this.showFormatFailNotice("stale", rect);
+			return null;
+		}
+
+		const text = blockEl.textContent ?? "";
+		let a = textOffset(blockEl, range.startContainer, range.startOffset);
+		let b = textOffset(blockEl, range.endContainer, range.endOffset);
+		while (a < b && /\s/.test(text[a])) a++;
+		while (b > a && /\s/.test(text[b - 1])) b--;
+		if (a === b) return null;
+
+		this.capturedSelection = { snapshot: this.snapshot, block, text, a, b, rect };
 		return { rect };
 	}
 
 	/**
-	 * Apply a format wrapper around the previously captured selection.
-	 * Writes to the source file via vault.process().
+	 * Wrap the captured selection in `wrapper` and write it to the source file.
+	 * A candidate edit is written only if it is the single one that renders to
+	 * the original page with the wrapper's element around exactly the selection.
 	 */
 	async applyFormat(wrapper: FormatWrapper): Promise<void> {
-		if (!this.capturedSelection || !this.file) return;
+		const captured = this.capturedSelection;
+		this.capturedSelection = null;
+		if (!captured || !this.file) return;
+		const { snapshot, block, text, a, b, rect } = captured;
+		const file = this.file;
 
-		const { text: selectedText, snapshot, block } = this.capturedSelection;
+		const src = snapshot.text.slice(block.start, block.end);
+		const sel = text.slice(a, b);
+		const component = new Component();
+		component.load();
+		let edit: string | null = null;
+		let reason: FormatFailReason = "not-found";
+		try {
+			const renderInto = async (md: string): Promise<HTMLElement> => {
+				const div = createDiv();
+				await MarkdownRenderer.render(this.app, md, div, file.path, component);
+				div.normalize();
+				return div;
+			};
 
-		const sourceContent = snapshot.text.slice(block.start, block.end);
-
-		let sourceIdx = sourceContent.indexOf(selectedText);
-
-		if (sourceIdx === -1) {
-			const stripped = sourceContent.replace(/[*_~=]/g, "");
-			const strippedIdx = stripped.indexOf(selectedText);
-			if (strippedIdx !== -1) {
-				let srcPos = 0;
-				let strippedCount = 0;
-				while (srcPos < sourceContent.length && strippedCount < strippedIdx) {
-					if (!/[*_~=]/.test(sourceContent[srcPos])) strippedCount++;
-					srcPos++;
+			const base = await renderInto(src);
+			if (base.textContent === text) {
+				const covered = Array.from(base.querySelectorAll(wrapper.tag)).some((el) => {
+					const [s, e] = span(base, el);
+					return s <= a && e >= b;
+				});
+				if (covered) {
+					reason = "collision";
+				} else {
+					const landed: string[] = [];
+					for (const candidate of wrapCandidates(src, sel, wrapper.open, wrapper.close)) {
+						const d = await renderInto(candidate);
+						const hits = Array.from(d.querySelectorAll(wrapper.tag)).filter((el) => {
+							if (!isTarget(el, wrapper)) return false;
+							const [s, e] = span(d, el);
+							return s === a && e === b;
+						});
+						if (hits.length !== 1) continue;
+						hits[0].replaceWith(...Array.from(hits[0].childNodes));
+						d.normalize();
+						if (d.isEqualNode(base)) landed.push(candidate);
+					}
+					if (landed.length === 1) edit = landed[0];
 				}
-				sourceIdx = srcPos;
 			}
+		} finally {
+			component.unload();
 		}
 
-		if (sourceIdx === -1) {
-			// Same condition captureFromSelection reports, reached on the apply
-			// side instead. It used to warn to the console, so a format tap that
-			// could not be applied did nothing at all from the user's side.
-			this.showFormatFailNotice("not-found");
+		if (edit === null) {
+			this.showFormatFailNotice(reason, rect);
 			return;
 		}
 
-		const absoluteStart = block.start + sourceIdx;
-		const absoluteEnd = absoluteStart + selectedText.length;
-
 		let stale = false;
-		await this.app.vault.process(this.file, (data) => {
+		await this.app.vault.process(file, (data) => {
 			if (data !== snapshot.text) {
 				stale = true;
 				return data;
 			}
-			return (
-				data.slice(0, absoluteStart) +
-				wrapper.open +
-				data.slice(absoluteStart, absoluteEnd) +
-				wrapper.close +
-				data.slice(absoluteEnd)
-			);
+			return data.slice(0, block.start) + edit + data.slice(block.end);
 		});
-
-		this.capturedSelection = null;
-		if (stale) this.showFormatFailNotice("stale");
+		if (stale) this.showFormatFailNotice("stale", rect);
 	}
 
 	/**
@@ -426,10 +424,13 @@ export class PreachFormatToolbar {
 					return;
 				}
 				// Apply asynchronously
-				void this.formatManager.applyFormat(wrapper).then(() => {
-					this.hide();
-					window.getSelection()?.removeAllRanges();
-				});
+				void this.formatManager
+					.applyFormat(wrapper)
+					.catch((err) => console.error("Preach MD: format failed", err))
+					.finally(() => {
+						this.hide();
+						window.getSelection()?.removeAllRanges();
+					});
 			});
 		};
 

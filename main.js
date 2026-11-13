@@ -28,10 +28,10 @@ __export(main_exports, {
   default: () => PreachMDPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/preach-view.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/settings.ts
 var import_obsidian = require("obsidian");
@@ -1069,11 +1069,11 @@ var ScriptureExpander = class {
         if (ref.index > cursor) {
           frag.appendText(text.slice(cursor, ref.index));
         }
-        const span = frag.createSpan({
+        const span2 = frag.createSpan({
           cls: "preach-scripture-ref",
           text: ref.raw
         });
-        span.dataset.ref = JSON.stringify({
+        span2.dataset.ref = JSON.stringify({
           raw: ref.raw,
           book: ref.book,
           chapter: ref.chapter,
@@ -1081,9 +1081,9 @@ var ScriptureExpander = class {
           chapterEnd: ref.chapterEnd,
           verseEnd: ref.verseEnd
         });
-        span.addEventListener("pointerdown", (e) => {
+        span2.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
-          void this.handleTap(span, ref);
+          void this.handleTap(span2, ref);
         });
         cursor = ref.index + ref.length;
       }
@@ -1098,12 +1098,12 @@ var ScriptureExpander = class {
       this.walkNode(child);
     }
   }
-  async handleTap(span, ref) {
-    const existing = this.expanded.get(span);
+  async handleTap(span2, ref) {
+    const existing = this.expanded.get(span2);
     if (existing) {
       existing.remove();
-      this.expanded.delete(span);
-      span.classList.remove("preach-scripture-ref--open");
+      this.expanded.delete(span2);
+      span2.classList.remove("preach-scripture-ref--open");
       return;
     }
     this.expanded.forEach((el, s) => {
@@ -1114,9 +1114,9 @@ var ScriptureExpander = class {
     const expandEl = createSpan();
     expandEl.className = "preach-scripture-expand";
     expandEl.textContent = "Loading...";
-    span.insertAdjacentElement("afterend", expandEl);
-    this.expanded.set(span, expandEl);
-    span.classList.add("preach-scripture-ref--open");
+    span2.insertAdjacentElement("afterend", expandEl);
+    this.expanded.set(span2, expandEl);
+    span2.classList.add("preach-scripture-ref--open");
     try {
       const verses = await fetchVerses(this.app, this.csbFolder, ref);
       expandEl.empty();
@@ -1142,8 +1142,8 @@ var ScriptureExpander = class {
       expandEl.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         expandEl.remove();
-        this.expanded.delete(span);
-        span.classList.remove("preach-scripture-ref--open");
+        this.expanded.delete(span2);
+        span2.classList.remove("preach-scripture-ref--open");
       });
     } catch (err) {
       expandEl.empty();
@@ -1153,8 +1153,8 @@ var ScriptureExpander = class {
       expandEl.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         expandEl.remove();
-        this.expanded.delete(span);
-        span.classList.remove("preach-scripture-ref--open");
+        this.expanded.delete(span2);
+        span2.classList.remove("preach-scripture-ref--open");
       });
     }
   }
@@ -1166,14 +1166,41 @@ var ScriptureExpander = class {
 };
 
 // src/format.ts
-var FORMAT_BOLD = { open: "**", close: "**" };
-var FORMAT_ITALIC = { open: "*", close: "*" };
-var FORMAT_UNDERLINE = { open: "<u>", close: "</u>" };
-var FORMAT_HIGHLIGHT = { open: "==", close: "==" };
+var import_obsidian3 = require("obsidian");
+var FORMAT_BOLD = { open: "**", close: "**", tag: "strong" };
+var FORMAT_ITALIC = { open: "*", close: "*", tag: "em" };
+var FORMAT_UNDERLINE = { open: "<u>", close: "</u>", tag: "u" };
+var FORMAT_HIGHLIGHT = { open: "==", close: "==", tag: "mark", colour: "" };
+var MAX_CANDIDATES = 12;
+function wrapCandidates(src, sel, open, close) {
+  const edits = [];
+  for (let i = src.indexOf(sel); i !== -1; i = src.indexOf(sel, i + 1)) {
+    edits.push(src.slice(0, i) + open + sel + close + src.slice(i + sel.length));
+    if (edits.length > MAX_CANDIDATES)
+      return [];
+  }
+  return edits;
+}
+var textOffset = (root, node, offset) => {
+  var _a;
+  const r = ((_a = root.ownerDocument) != null ? _a : document).createRange();
+  r.setStart(root, 0);
+  r.setEnd(node, offset);
+  return r.toString().length;
+};
+var span = (root, el) => {
+  var _a;
+  const start = textOffset(root, el, 0);
+  return [start, start + ((_a = el.textContent) != null ? _a : "").length];
+};
+var isTarget = (el, w) => {
+  var _a, _b;
+  return w.tag !== "mark" || ((_a = el.getAttribute("data-highlight")) != null ? _a : "") === ((_b = w.colour) != null ? _b : "");
+};
 var FORMAT_FAIL_MESSAGE = {
-  "scripture-expand": "Can't format inside an expanded passage.",
+  "scripture-expand": "Close the open passage before formatting.",
   "cross-block": "Can't format across two paragraphs.",
-  "not-found": "Can't find that text in the note source.",
+  "not-found": "Can't match that text to the note source.",
   collision: "That text is already formatted.",
   stale: "The note is updating. Try again in a moment."
 };
@@ -1204,7 +1231,7 @@ var FormatManager = class {
    * and returns null.
    */
   captureFromSelection(bodyEl) {
-    var _a, _b;
+    var _a, _b, _c;
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed || sel.rangeCount === 0)
       return null;
@@ -1214,121 +1241,113 @@ var FormatManager = class {
     const range = sel.getRangeAt(0);
     if (!bodyEl.contains(range.commonAncestorContainer))
       return null;
-    let node = sel.anchorNode;
-    while (node) {
-      if (node.instanceOf(HTMLElement)) {
-        if (node.classList.contains("preach-scripture-expand")) {
-          this.showFormatFailNotice("scripture-expand", range.getBoundingClientRect());
-          return null;
-        }
+    const rect = range.getBoundingClientRect();
+    const blockOf = (n) => {
+      for (let c = n; c; c = c.parentNode) {
+        if (c.instanceOf(HTMLElement) && c.classList.contains("preach-block"))
+          return c;
       }
-      node = node.parentNode;
-    }
-    let blockEl = null;
-    node = sel.anchorNode;
-    while (node) {
-      if (node.instanceOf(HTMLElement) && node.classList.contains("preach-block")) {
-        blockEl = node;
-        break;
-      }
-      node = node.parentNode;
-    }
+      return null;
+    };
+    const blockEl = blockOf(range.startContainer);
     if (!blockEl)
       return null;
-    let focusBlockEl = null;
-    let fn = sel.focusNode;
-    while (fn) {
-      if (fn.instanceOf(HTMLElement) && fn.classList.contains("preach-block")) {
-        focusBlockEl = fn;
-        break;
-      }
-      fn = fn.parentNode;
-    }
-    if (focusBlockEl !== blockEl) {
-      this.showFormatFailNotice("cross-block", range.getBoundingClientRect());
+    if (blockOf(range.endContainer) !== blockEl) {
+      this.showFormatFailNotice("cross-block", rect);
       return null;
     }
-    const blockIndex = parseInt((_a = blockEl.dataset.blockIndex) != null ? _a : "", 10);
-    const block = (_b = this.snapshot) == null ? void 0 : _b.blocks[blockIndex];
+    if (blockEl.querySelector(".preach-scripture-expand")) {
+      this.showFormatFailNotice("scripture-expand", rect);
+      return null;
+    }
+    const block = (_b = this.snapshot) == null ? void 0 : _b.blocks[parseInt((_a = blockEl.dataset.blockIndex) != null ? _a : "", 10)];
     if (!this.snapshot || !block) {
-      this.showFormatFailNotice("stale", range.getBoundingClientRect());
+      this.showFormatFailNotice("stale", rect);
       return null;
     }
-    const snapshot = this.snapshot;
-    const sourceContent = snapshot.text.slice(block.start, block.end);
-    let sourceIdx = sourceContent.indexOf(selectedText);
-    if (sourceIdx === -1) {
-      const stripped = sourceContent.replace(/[*_~=<>/]/g, "");
-      const strippedIdx = stripped.indexOf(selectedText);
-      if (strippedIdx !== -1) {
-        let srcPos = 0;
-        let strippedCount = 0;
-        while (srcPos < sourceContent.length && strippedCount < strippedIdx) {
-          if (!/[*_~=<>/]/.test(sourceContent[srcPos]))
-            strippedCount++;
-          srcPos++;
-        }
-        sourceIdx = srcPos;
-      }
-    }
-    if (sourceIdx === -1) {
-      this.showFormatFailNotice("not-found", range.getBoundingClientRect());
+    const text = (_c = blockEl.textContent) != null ? _c : "";
+    let a = textOffset(blockEl, range.startContainer, range.startOffset);
+    let b = textOffset(blockEl, range.endContainer, range.endOffset);
+    while (a < b && /\s/.test(text[a]))
+      a++;
+    while (b > a && /\s/.test(text[b - 1]))
+      b--;
+    if (a === b)
       return null;
-    }
-    const before = sourceContent.slice(0, sourceIdx);
-    const after = sourceContent.slice(sourceIdx + selectedText.length);
-    const wrappers = ["**", "*", "==", "<u>"];
-    for (const w of wrappers) {
-      if (before.endsWith(w) && after.startsWith(w === "**" ? "**" : w === "*" ? "*" : w === "==" ? "==" : "</u>")) {
-        this.showFormatFailNotice("collision", range.getBoundingClientRect());
-        return null;
-      }
-    }
-    this.capturedSelection = { text: selectedText, snapshot, block };
-    const rect = range.getBoundingClientRect();
+    this.capturedSelection = { snapshot: this.snapshot, block, text, a, b, rect };
     return { rect };
   }
   /**
-   * Apply a format wrapper around the previously captured selection.
-   * Writes to the source file via vault.process().
+   * Wrap the captured selection in `wrapper` and write it to the source file.
+   * A candidate edit is written only if it is the single one that renders to
+   * the original page with the wrapper's element around exactly the selection.
    */
   async applyFormat(wrapper) {
-    if (!this.capturedSelection || !this.file)
+    const captured = this.capturedSelection;
+    this.capturedSelection = null;
+    if (!captured || !this.file)
       return;
-    const { text: selectedText, snapshot, block } = this.capturedSelection;
-    const sourceContent = snapshot.text.slice(block.start, block.end);
-    let sourceIdx = sourceContent.indexOf(selectedText);
-    if (sourceIdx === -1) {
-      const stripped = sourceContent.replace(/[*_~=]/g, "");
-      const strippedIdx = stripped.indexOf(selectedText);
-      if (strippedIdx !== -1) {
-        let srcPos = 0;
-        let strippedCount = 0;
-        while (srcPos < sourceContent.length && strippedCount < strippedIdx) {
-          if (!/[*_~=]/.test(sourceContent[srcPos]))
-            strippedCount++;
-          srcPos++;
+    const { snapshot, block, text, a, b, rect } = captured;
+    const file = this.file;
+    const src = snapshot.text.slice(block.start, block.end);
+    const sel = text.slice(a, b);
+    const component = new import_obsidian3.Component();
+    component.load();
+    let edit = null;
+    let reason = "not-found";
+    try {
+      const renderInto = async (md) => {
+        const div = createDiv();
+        await import_obsidian3.MarkdownRenderer.render(this.app, md, div, file.path, component);
+        div.normalize();
+        return div;
+      };
+      const base = await renderInto(src);
+      if (base.textContent === text) {
+        const covered = Array.from(base.querySelectorAll(wrapper.tag)).some((el) => {
+          const [s, e] = span(base, el);
+          return s <= a && e >= b;
+        });
+        if (covered) {
+          reason = "collision";
+        } else {
+          const landed = [];
+          for (const candidate of wrapCandidates(src, sel, wrapper.open, wrapper.close)) {
+            const d = await renderInto(candidate);
+            const hits = Array.from(d.querySelectorAll(wrapper.tag)).filter((el) => {
+              if (!isTarget(el, wrapper))
+                return false;
+              const [s, e] = span(d, el);
+              return s === a && e === b;
+            });
+            if (hits.length !== 1)
+              continue;
+            hits[0].replaceWith(...Array.from(hits[0].childNodes));
+            d.normalize();
+            if (d.isEqualNode(base))
+              landed.push(candidate);
+          }
+          if (landed.length === 1)
+            edit = landed[0];
         }
-        sourceIdx = srcPos;
       }
+    } finally {
+      component.unload();
     }
-    if (sourceIdx === -1) {
-      this.showFormatFailNotice("not-found");
+    if (edit === null) {
+      this.showFormatFailNotice(reason, rect);
       return;
     }
-    const absoluteStart = block.start + sourceIdx;
-    const absoluteEnd = absoluteStart + selectedText.length;
     let stale = false;
-    await this.app.vault.process(this.file, (data) => {
+    await this.app.vault.process(file, (data) => {
       if (data !== snapshot.text) {
         stale = true;
         return data;
       }
-      return data.slice(0, absoluteStart) + wrapper.open + data.slice(absoluteStart, absoluteEnd) + wrapper.close + data.slice(absoluteEnd);
+      return data.slice(0, block.start) + edit + data.slice(block.end);
     });
-    this.capturedSelection = null;
     if (stale)
-      this.showFormatFailNotice("stale");
+      this.showFormatFailNotice("stale", rect);
   }
   /**
    * Show a brief notice explaining why formatting could not be applied.
@@ -1462,7 +1481,7 @@ var PreachFormatToolbar = class {
           this.hide();
           return;
         }
-        void this.formatManager.applyFormat(wrapper).then(() => {
+        void this.formatManager.applyFormat(wrapper).catch((err) => console.error("Preach MD: format failed", err)).finally(() => {
           var _a;
           this.hide();
           (_a = window.getSelection()) == null ? void 0 : _a.removeAllRanges();
@@ -1561,7 +1580,7 @@ function extractHeadings(markdown, level) {
   }
   return results;
 }
-var PreachView = class extends import_obsidian3.ItemView {
+var PreachView = class extends import_obsidian4.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.file = null;
@@ -1617,7 +1636,7 @@ var PreachView = class extends import_obsidian3.ItemView {
       ws.leftSplit.collapse();
     if (this.rightSplitWasOpen)
       ws.rightSplit.collapse();
-    this.renderComponent = new import_obsidian3.Component();
+    this.renderComponent = new import_obsidian4.Component();
     this.renderComponent.load();
     this.scriptureExpander = new ScriptureExpander(
       this.app,
@@ -1868,7 +1887,7 @@ var PreachView = class extends import_obsidian3.ItemView {
           cls: "preach-block",
           attr: { "data-block-index": String(i) }
         });
-        await import_obsidian3.MarkdownRenderer.render(
+        await import_obsidian4.MarkdownRenderer.render(
           this.app,
           snapshot.text.slice(block.start, block.end),
           wrapper,
@@ -1880,7 +1899,7 @@ var PreachView = class extends import_obsidian3.ItemView {
       }
     } else {
       const wrapper = body.createDiv({ cls: "preach-block" });
-      await import_obsidian3.MarkdownRenderer.render(this.app, text, wrapper, file.path, this.renderComponent);
+      await import_obsidian4.MarkdownRenderer.render(this.app, text, wrapper, file.path, this.renderComponent);
       if (gen !== this.renderGen)
         return;
     }
@@ -2161,7 +2180,7 @@ var PreachView = class extends import_obsidian3.ItemView {
 };
 
 // src/main.ts
-var PreachMDPlugin = class extends import_obsidian4.Plugin {
+var PreachMDPlugin = class extends import_obsidian5.Plugin {
   async onload() {
     await this.loadSettings();
     this.registerView(
