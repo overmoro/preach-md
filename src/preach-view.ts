@@ -11,7 +11,7 @@ import { MAX_TEXT_SCALE, MIN_TEXT_SCALE, TEXT_SCALE_STEP } from "./settings";
 import { PreachTimer } from "./timer";
 import type { TimerThresholds } from "./timer";
 import { noteTargetMinutes } from "./settings";
-import { HighlightManager, parseBlocks } from "./highlight";
+import { sectionsFit, toBlocks, type Snapshot } from "./blocks";
 import { ScriptureExpander } from "./scripture";
 import { FormatManager, PreachFormatToolbar } from "./format";
 
@@ -93,16 +93,16 @@ export class PreachView extends ItemView {
 	private renderComponent!: Component;
 
 	// Feature managers
-	private highlightManager!: HighlightManager;
 	private scriptureExpander!: ScriptureExpander;
 	private formatManager!: FormatManager;
 	private preachFormatToolbar: PreachFormatToolbar | null = null;
 
-	// Current preach body element (replaced on each renderFile; toolbar queries via getter)
+	// Current preach body element (replaced on each render; toolbar queries via getter)
 	private preachBodyEl: HTMLElement | null = null;
 
-	// Parsed blocks (kept in sync after each renderFile call)
-	private blocks: ReturnType<typeof parseBlocks> = [];
+	// Text and blocks of the last block render; null while showing the fallback
+	private snapshot: Snapshot | null = null;
+	private renderGen = 0;
 
 	// View header (hidden while preach mode is active)
 	private viewHeaderEl: HTMLElement | null = null;
@@ -149,11 +149,6 @@ export class PreachView extends ItemView {
 		this.renderComponent = new Component();
 		this.renderComponent.load();
 
-		this.highlightManager = new HighlightManager(
-			this.app,
-			this.file,
-			this.renderComponent
-		);
 		this.scriptureExpander = new ScriptureExpander(
 			this.app,
 			this.plugin.settings.csbFolderPath,
@@ -182,27 +177,20 @@ export class PreachView extends ItemView {
 		await this.requestWakeLock();
 		this.suppressEdgeSwipes();
 
+		// Registered before the first render so a re-index during it isn't missed
+		this.registerEvent(
+			this.app.metadataCache.on("changed", (changed, data, cache) => {
+				if (this.file && changed.path === this.file.path) {
+					this.timer.updateThresholds(this.timerThresholds());
+					const snapshot = { text: data, blocks: toBlocks(data, cache.sections ?? []) };
+					void this.render(changed, data, snapshot, ++this.renderGen);
+				}
+			})
+		);
+
 		if (this.file) {
 			await this.renderFile(this.file);
 		}
-
-		// Re-render when the source file is saved (e.g. after editing)
-		this.registerEvent(
-			this.app.vault.on("modify", (modified) => {
-				if (this.file && modified.path === this.file.path) {
-					void this.renderFile(this.file);
-				}
-			})
-		);
-
-		// Frontmatter lands in the metadata cache after the modify event
-		this.registerEvent(
-			this.app.metadataCache.on("changed", (changed) => {
-				if (this.file && changed.path === this.file.path) {
-					this.timer.updateThresholds(this.timerThresholds());
-				}
-			})
-		);
 
 		// Track this leaf so pills can switch focus back to it
 		this.preachLeaf = this.leaf;
@@ -225,6 +213,7 @@ export class PreachView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.renderGen++;
 		if (this.idleTimeout !== null) {
 			window.clearTimeout(this.idleTimeout);
 			this.idleTimeout = null;
@@ -260,9 +249,6 @@ export class PreachView extends ItemView {
 	async setFile(file: TFile): Promise<void> {
 		this.file = file;
 		if (this.timer) this.timer.updateThresholds(this.timerThresholds());
-		if (this.highlightManager) {
-			this.highlightManager.updateFile(file);
-		}
 		if (this.formatManager) {
 			this.formatManager.updateFile(file);
 		}
@@ -381,9 +367,6 @@ export class PreachView extends ItemView {
 			this.resetIdleTimer();
 		});
 
-		// Wire the highlight manager to its content area (button removed)
-		this.highlightManager.init(null, this.scrollEl, this.scrollEl);
-
 		// Outline overlay (hidden by default)
 		this.overlayEl = root.createDiv({
 			cls: "preach-outline-overlay preach-outline-overlay--hidden",
@@ -439,61 +422,49 @@ export class PreachView extends ItemView {
 		}, 3000);
 	}
 
-	// Render the file into the scroll area using block-by-block rendering
+	// Open path: pair the file text with the metadata cache, or fall back to a whole-note render
 	private async renderFile(file: TFile): Promise<void> {
+		const gen = ++this.renderGen;
+		const text = await this.app.vault.read(file);
+		if (gen !== this.renderGen) return;
+		const cache = this.app.metadataCache.getFileCache(file);
+		const sections = cache?.sections ?? [];
+		const snapshot =
+			cache && sectionsFit(text, sections) ? { text, blocks: toBlocks(text, sections) } : null;
+		await this.render(file, text, snapshot, gen);
+	}
+
+	// Render into the scroll area, block by block when a consistent snapshot exists
+	private async render(file: TFile, text: string, snapshot: Snapshot | null, gen: number): Promise<void> {
 		const scrollTop = this.savedScrollTop;
 		this.scriptureExpander.collapseAll();
 		this.scrollEl.empty();
 
-		const markdown = await this.app.vault.read(file);
-		const blocks = parseBlocks(markdown);
-
-		// Keep a reference for scroll-sync in goToEdit
-		this.blocks = blocks;
-
-		// Store blocks in highlight manager
-		this.highlightManager.attachBlocks(blocks);
-
 		const body = this.scrollEl.createDiv({ cls: "preach-body" });
 		this.preachBodyEl = body;
-		if (this.formatManager) {
-			this.formatManager.updateBlocks(blocks);
-		}
+		this.snapshot = snapshot;
+		this.formatManager.updateSnapshot(snapshot);
 
-		for (let i = 0; i < blocks.length; i++) {
-			const block = blocks[i];
-			const wrapper = body.createDiv({
-				cls: "preach-block",
-				attr: {
-					"data-block-index": String(i),
-					"data-highlightable": block.highlightable ? "true" : "false",
-				},
-			});
-
-			await MarkdownRenderer.render(
-				this.app,
-				block.content,
-				wrapper,
-				file.path,
-				this.renderComponent
-			);
-
-			if (block.highlightable) {
-				wrapper.addEventListener("pointerdown", (e: PointerEvent) => {
-					// Only handle in highlight mode; ignore if user is tapping a scripture ref
-					const target = e.target as HTMLElement;
-					if (target.closest(".preach-scripture-ref") || target.closest(".preach-scripture-expand")) {
-						return;
-					}
-					if (this.highlightManager.isActive()) {
-						e.stopPropagation();
-						void this.highlightManager.handleBlockTap(i).then(() => {
-							// Re-render after highlight change
-							void this.renderFile(file);
-						});
-					}
+		if (snapshot) {
+			for (let i = 0; i < snapshot.blocks.length; i++) {
+				const block = snapshot.blocks[i];
+				const wrapper = body.createDiv({
+					cls: "preach-block",
+					attr: { "data-block-index": String(i) },
 				});
+				await MarkdownRenderer.render(
+					this.app,
+					snapshot.text.slice(block.start, block.end),
+					wrapper,
+					file.path,
+					this.renderComponent
+				);
+				if (gen !== this.renderGen) return;
 			}
+		} else {
+			const wrapper = body.createDiv({ cls: "preach-block" });
+			await MarkdownRenderer.render(this.app, text, wrapper, file.path, this.renderComponent);
+			if (gen !== this.renderGen) return;
 		}
 
 		// Scripture detection pass
@@ -501,7 +472,7 @@ export class PreachView extends ItemView {
 		this.scriptureExpander.processElement(body);
 
 		// Tag headings so outline works
-		this.tagRenderedHeadings(body, markdown);
+		this.tagRenderedHeadings(body, text);
 
 		// Restore scroll position after render
 		window.requestAnimationFrame(() => {
@@ -607,9 +578,8 @@ export class PreachView extends ItemView {
 		for (const el of Array.from(blockEls)) {
 			if (el.getBoundingClientRect().bottom > 0) {
 				const idx = parseInt(el.dataset.blockIndex ?? "", 10);
-				if (!isNaN(idx) && this.blocks[idx] !== undefined) {
-					return this.blocks[idx].startLine;
-				}
+				const block = this.snapshot?.blocks[idx];
+				if (block) return block.line;
 			}
 		}
 		return null;

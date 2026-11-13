@@ -3,7 +3,7 @@
 // to the source file from selected text in the preach view.
 
 import { App, TFile } from "obsidian";
-import type { Block } from "./highlight";
+import type { Block, Snapshot } from "./blocks";
 
 export interface FormatWrapper {
 	open: string;
@@ -26,7 +26,8 @@ export type FormatFailReason =
 	| "scripture-expand"
 	| "cross-block"
 	| "not-found"
-	| "collision";
+	| "collision"
+	| "stale";
 
 /**
  * Text shown for each bail condition. A total record rather than a lookup with
@@ -38,15 +39,16 @@ const FORMAT_FAIL_MESSAGE: Record<FormatFailReason, string> = {
 	"cross-block": "Can't format across two paragraphs.",
 	"not-found": "Can't find that text in the note source.",
 	collision: "That text is already formatted.",
+	stale: "The note is updating. Try again in a moment.",
 };
 
 export class FormatManager {
 	private app: App;
 	private file: TFile | null;
-	private blocks: Block[] = [];
+	private snapshot: Snapshot | null = null;
 
 	// The selection captured on pointerdown (before focus changes clear it)
-	private capturedSelection: { text: string; blockIndex: number } | null = null;
+	private capturedSelection: { text: string; snapshot: Snapshot; block: Block } | null = null;
 
 	// Reused notice element
 	private noticeEl: HTMLElement | null = null;
@@ -61,8 +63,8 @@ export class FormatManager {
 		this.file = file;
 	}
 
-	updateBlocks(blocks: Block[]): void {
-		this.blocks = blocks;
+	updateSnapshot(snapshot: Snapshot | null): void {
+		this.snapshot = snapshot;
 	}
 
 	/**
@@ -126,12 +128,15 @@ export class FormatManager {
 		}
 
 		const blockIndex = parseInt(blockEl.dataset.blockIndex ?? "", 10);
-		if (isNaN(blockIndex)) return null;
 
-		const block = this.blocks[blockIndex];
-		if (!block) return null;
+		const block = this.snapshot?.blocks[blockIndex];
+		if (!this.snapshot || !block) {
+			this.showFormatFailNotice("stale", range.getBoundingClientRect());
+			return null;
+		}
+		const snapshot = this.snapshot;
 
-		const sourceContent = block.content;
+		const sourceContent = snapshot.text.slice(block.start, block.end);
 
 		// Try to find selected text in source block
 		let sourceIdx = sourceContent.indexOf(selectedText);
@@ -168,7 +173,7 @@ export class FormatManager {
 			}
 		}
 
-		this.capturedSelection = { text: selectedText, blockIndex };
+		this.capturedSelection = { text: selectedText, snapshot, block };
 
 		const rect = range.getBoundingClientRect();
 		return { rect };
@@ -181,11 +186,9 @@ export class FormatManager {
 	async applyFormat(wrapper: FormatWrapper): Promise<void> {
 		if (!this.capturedSelection || !this.file) return;
 
-		const { text: selectedText, blockIndex } = this.capturedSelection;
-		const block = this.blocks[blockIndex];
-		if (!block) return;
+		const { text: selectedText, snapshot, block } = this.capturedSelection;
 
-		const sourceContent = block.content;
+		const sourceContent = snapshot.text.slice(block.start, block.end);
 
 		let sourceIdx = sourceContent.indexOf(selectedText);
 
@@ -211,10 +214,15 @@ export class FormatManager {
 			return;
 		}
 
-		const absoluteStart = block.startOffset + sourceIdx;
+		const absoluteStart = block.start + sourceIdx;
 		const absoluteEnd = absoluteStart + selectedText.length;
 
+		let stale = false;
 		await this.app.vault.process(this.file, (data) => {
+			if (data !== snapshot.text) {
+				stale = true;
+				return data;
+			}
 			return (
 				data.slice(0, absoluteStart) +
 				wrapper.open +
@@ -225,6 +233,7 @@ export class FormatManager {
 		});
 
 		this.capturedSelection = null;
+		if (stale) this.showFormatFailNotice("stale");
 	}
 
 	/**
@@ -313,7 +322,7 @@ export class FormatManager {
  * based on whether a valid selection exists inside .preach-body.
  *
  * bodyElGetter is called on each selection event so it always has
- * the current body element (which is replaced on every renderFile call).
+ * the current body element (which is replaced on every render).
  */
 export class PreachFormatToolbar {
 	private formatManager: FormatManager;
