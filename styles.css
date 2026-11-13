@@ -814,6 +814,7 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 
 .preach-inline-fmt-row {
 	display: flex;
+	justify-content: center;
 	align-items: center;
 	gap: 4px;
 }
