@@ -601,7 +601,8 @@ function chapterPaths(csbFolder, book, chapter) {
   if (meta !== void 0) {
     const folder = `${meta.num} - ${book}`;
     if (meta.singleChapter) {
-      candidates.push(`${csbFolder}/${folder}/${prefix}.md`);
+      if (chapter === 1)
+        candidates.push(`${csbFolder}/${folder}/${prefix}.md`);
     } else {
       candidates.push(`${csbFolder}/${folder}/${prefix}-${String(chapter).padStart(2, "0")}.md`);
     }

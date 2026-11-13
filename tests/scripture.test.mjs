@@ -257,6 +257,19 @@ function ref(over) {
 
 const flat = (rows) => rows.map((r) => `${r.chapter}:${r.verse}=${r.text}`);
 
+test("a single-chapter book has no numbered path for any other chapter", async () => {
+	assert.deepEqual(chapterPaths("Bible", "Jude", 2), ["Bible/Jude/Jude 2.md"]);
+	const numbered = fakeApp({ "J1/65 - Jude/Jude.md": chapterFile(1, 5) });
+	const plain = fakeApp({ "J2/Jude/Jude 1.md": chapterFile(1, 5) });
+	const jude = (over) => ref({ book: "Jude", chapter: 1, verseStart: 3, chapterEnd: 1, verseEnd: 3, raw: "Jude", ...over });
+	assert.deepEqual(flat(await fetchVerses(numbered, "J1", jude({}))), ["1:3=c1v3 text"]);
+	assert.deepEqual(flat(await fetchVerses(plain, "J2", jude({}))), ["1:3=c1v3 text"]);
+	for (const [app, dir] of [[numbered, "J1"], [plain, "J2"]]) {
+		await assert.rejects(fetchVerses(app, dir, jude({ chapter: 2, chapterEnd: 2, verseStart: 1, verseEnd: 1 })), /Passage not found/);
+		await assert.rejects(fetchVerses(app, dir, jude({ chapterEnd: 2, verseEnd: 1 })), /Passage not found/);
+	}
+});
+
 test("a two-chapter range reads to the end of the first chapter then from verse 1", async () => {
 	const app = fakeApp({
 		"B1/John/John 3.md": chapterFile(3, 4),

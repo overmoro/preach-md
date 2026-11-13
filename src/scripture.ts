@@ -618,7 +618,8 @@ export function chapterPaths(csbFolder: string, book: string, chapter: number): 
 		const folder = `${meta.num} - ${book}`;
 
 		if (meta.singleChapter) {
-			candidates.push(`${csbFolder}/${folder}/${prefix}.md`);
+			// There is no chapter 2 of Jude to find.
+			if (chapter === 1) candidates.push(`${csbFolder}/${folder}/${prefix}.md`);
 		} else {
 			candidates.push(`${csbFolder}/${folder}/${prefix}-${String(chapter).padStart(2, "0")}.md`);
 		}
