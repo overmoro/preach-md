@@ -1464,12 +1464,12 @@ var PreachView = class extends import_obsidian2.ItemView {
       () => this.preachBodyEl,
       this.containerEl
     );
-    await this.requestWakeLock();
     this.registerDomEvent(document, "visibilitychange", () => {
       if (document.visibilityState === "visible" && (!this.wakeLock || this.wakeLock.released)) {
         void this.requestWakeLock();
       }
     });
+    await this.requestWakeLock();
     this.suppressEdgeSwipes();
     if (this.file) {
       await this.renderFile(this.file);
