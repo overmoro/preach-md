@@ -751,7 +751,12 @@ export function parseBibleText(text: string): BibleChapters | null {
 
 function loadDownloadedBible(app: App): Promise<BibleChapters | null> {
 	if (bibleFile === null) return Promise.resolve(null);
-	bible ??= app.vault.adapter.read(bibleFile).then(parseBibleText, () => (bible = null));
+	if (bible === null) {
+		const p: Promise<BibleChapters | null> = app.vault.adapter
+			.read(bibleFile)
+			.then(parseBibleText, () => (bible === p ? (bible = null) : null));
+		bible = p;
+	}
 	return bible;
 }
 

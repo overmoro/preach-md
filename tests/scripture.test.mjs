@@ -659,6 +659,26 @@ test("a passage the vault can only half serve comes wholly from the download", a
 	assert.equal(flat(rows).at(-1), "4:1=b4v1");
 });
 
+test("a slow failed read can't clear a newer download's memo", async () => {
+	setBibleFile("dl20/bsb.txt");
+	let fail;
+	const slow = fakeApp({});
+	slow.vault.adapter.read = () => new Promise((_, reject) => (fail = reject));
+	slow.vault.adapter.exists = async () => true;
+	const stale = bibleStatus(slow);
+	await new Promise((r) => setTimeout(r));
+	setBibleFile("dl21/bsb.txt");
+	let reads = 0;
+	const app = fakeApp({ "dl21/bsb.txt": bibleText() });
+	const read = app.vault.adapter.read;
+	app.vault.adapter.read = async (p) => (reads++, read(p));
+	assert.equal(await bibleStatus(app), "ready");
+	fail(new Error("late"));
+	await stale;
+	assert.equal(await bibleStatus(app), "ready");
+	assert.equal(reads, 1);
+});
+
 test("a damaged download plus a vault miss is not found", async () => {
 	setBibleFile("dl6/bsb.txt");
 	const app = fakeApp({ "dl6/bsb.txt": bibleText({ john: true }).slice(0, -8) });

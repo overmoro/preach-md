@@ -165,7 +165,6 @@ Preach MD makes one kind of network request, and only when you ask for it.
 
 Code reviewers: the only network call is `requestUrl` in `downloadBible` in `src/scripture.ts`, run from the settings button. The `nav.wakeLock.request("screen")` call in `src/preach-view.ts` is the Wake Lock API, not a network request.
 
-
 ---
 
 ## License

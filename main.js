@@ -693,7 +693,10 @@ function parseBibleText(text) {
 function loadDownloadedBible(app) {
   if (bibleFile === null)
     return Promise.resolve(null);
-  bible != null ? bible : bible = app.vault.adapter.read(bibleFile).then(parseBibleText, () => bible = null);
+  if (bible === null) {
+    const p = app.vault.adapter.read(bibleFile).then(parseBibleText, () => bible === p ? bible = null : null);
+    bible = p;
+  }
   return bible;
 }
 async function bibleStatus(app) {
