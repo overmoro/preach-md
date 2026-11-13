@@ -438,7 +438,9 @@ test("spaced numbered abbreviations keep their number", () => {
 		["1 Jn 3:11", "1 John", 3, 11, 3, 11],
 		["4:7", "1 John", 4, 7, 4, 7],
 	]);
-	// A number with no such book must not fall through to the unnumbered one.
+	// "Jhn" is the one John alias that works alone, so its numbered forms must be keyed too.
+	assert.deepEqual(tuples("2 Jhn 1:1"), [["2 Jhn 1:1", "2 John", 1, 1, 1, 1]]);
+	assert.deepEqual(tuples("1 Jhn 3:11"), [["1 Jhn 3:11", "1 John", 3, 11, 3, 11]]);
 	for (const t of ["2 Jo 3:4", "3 Jo 3:4"]) {
 		assert.deepEqual(tuples(t), [], t);
 	}

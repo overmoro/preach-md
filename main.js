@@ -348,6 +348,7 @@ var BOOK_MAP = {
   "1john": "1 John",
   "1joh": "1 John",
   "1jn": "1 John",
+  "1jhn": "1 John",
   "1jo": "1 John",
   "i john": "1 John",
   // 2 John
@@ -355,12 +356,14 @@ var BOOK_MAP = {
   "2john": "2 John",
   "2joh": "2 John",
   "2jn": "2 John",
+  "2jhn": "2 John",
   "ii john": "2 John",
   // 3 John
   "3 john": "3 John",
   "3john": "3 John",
   "3joh": "3 John",
   "3jn": "3 John",
+  "3jhn": "3 John",
   "iii john": "3 John",
   // Jude
   jude: "Jude",
@@ -410,8 +413,6 @@ function parseReferences(text, passages = []) {
       const candidate = words.slice(w).join(" ");
       const resolved = normaliseBook(candidate);
       if (resolved !== null) {
-        if (w === 1 && /^[123]$/.test(words[0]) && NUMBERED_STEMS.has(resolved))
-          break;
         book = resolved;
         offset = rawBook.length - candidate.length;
         break;
@@ -592,7 +593,6 @@ CANON_ROWS.forEach((row, index) => {
     singleChapter: row[2] === SINGLE_CHAPTER
   });
 });
-var NUMBERED_STEMS = new Set([...BOOKS.keys()].filter((b) => /^[123] /.test(b)).map((b) => b.slice(2)));
 function chapterPaths(csbFolder, book, chapter) {
   var _a;
   const meta = BOOKS.get(book);
