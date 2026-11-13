@@ -407,10 +407,9 @@
 	--preach-mark-bg: var(--highlight-background-purple);
 }
 
-/* Tappable block in highlight-mode gets a subtle tap affordance */
-.preach-block[data-highlightable="true"] {
-	border-radius: 4px;
-	transition: background 0.1s;
+/* Whole-note fallback render shows the worker's frontmatter block otherwise */
+.preach-body pre.frontmatter {
+	display: none;
 }
 
 /* ------------------------------------------------------------------ */
