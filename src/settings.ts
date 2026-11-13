@@ -3,11 +3,24 @@ import type { SettingDefinitionItem } from "obsidian";
 import type PreachMDPlugin from "./main";
 import { BSB_SIZE, BSB_URL, bibleStatus, downloadBible, removeBible } from "./scripture";
 
+export type SectionStripMode = "off" | "sections" | "pacing";
+
+const SECTION_STRIP_OPTIONS: Record<SectionStripMode, string> = {
+	off: "Off",
+	sections: "Sections",
+	pacing: "Sections and pacing",
+};
+
+function isSectionStripMode(value: unknown): value is SectionStripMode {
+	return value === "off" || value === "sections" || value === "pacing";
+}
+
 export interface PreachMDSettings {
 	targetMinutes: number;
 	warnMinutes: number;
 	critMinutes: number;
 	sectionHeadingLevel: number;
+	sectionStrip: SectionStripMode;
 	csbFolderPath: string;
 	textScalePercent: number;
 }
@@ -21,6 +34,7 @@ export const DEFAULT_SETTINGS: PreachMDSettings = {
 	warnMinutes: 5,
 	critMinutes: 1,
 	sectionHeadingLevel: 2,
+	sectionStrip: "sections",
 	csbFolderPath: "30_Knowledge/Theology/Bible/CSB",
 	textScalePercent: 100,
 };
@@ -80,6 +94,9 @@ export function parseStoredSettings(raw: unknown): Partial<PreachMDSettings> {
 	// Matches the range the settings controls accept.
 	const sectionHeadingLevel = boundedInt(field(raw, "sectionHeadingLevel"), 1, 6);
 	if (sectionHeadingLevel !== undefined) out.sectionHeadingLevel = sectionHeadingLevel;
+
+	const sectionStrip = field(raw, "sectionStrip");
+	if (isSectionStripMode(sectionStrip)) out.sectionStrip = sectionStrip;
 
 	const csbFolderPath = field(raw, "csbFolderPath");
 	if (typeof csbFolderPath === "string") out.csbFolderPath = csbFolderPath.trim();
@@ -167,6 +184,17 @@ export class PreachMDSettingTab extends PluginSettingTab {
 							placeholder: String(DEFAULT_SETTINGS.sectionHeadingLevel),
 							min: 1,
 							max: 6,
+						},
+					},
+					{
+						name: "Section strip",
+						desc: "A strip on the right edge with one segment per section; the one you're reading is lit. Tap the screen to wake the controls, then tap a segment to jump. With pacing, a planned time at the end of a section heading, like (~5 min), is hidden from the heading and the strip shows whether you're ahead or behind once the timer is running. Applies the next time you open preach mode.",
+						aliases: ["pacing", "progress", "sections", "outline"],
+						control: {
+							type: "dropdown",
+							key: "sectionStrip",
+							defaultValue: DEFAULT_SETTINGS.sectionStrip,
+							options: SECTION_STRIP_OPTIONS,
 						},
 					},
 				],
@@ -291,6 +319,10 @@ export class PreachMDSettingTab extends PluginSettingTab {
 				settings.sectionHeadingLevel = n;
 				break;
 			}
+			case "sectionStrip":
+				if (!isSectionStripMode(value)) return;
+				settings.sectionStrip = value;
+				break;
 			case "textScalePercent": {
 				const n = Number(value);
 				if (!Number.isInteger(n) || n < MIN_TEXT_SCALE || n > MAX_TEXT_SCALE) return;
@@ -380,6 +412,20 @@ export class PreachMDSettingTab extends PluginSettingTab {
 							this.plugin.settings.sectionHeadingLevel = n;
 							void this.plugin.saveSettings();
 						}
+					})
+			);
+
+		new Setting(containerEl)
+			.setName("Section strip")
+			.setDesc(
+				"A strip on the right edge with one segment per section; the one you're reading is lit. Tap the screen to wake the controls, then tap a segment to jump. With pacing, a planned time at the end of a section heading, like (~5 min), is hidden from the heading and the strip shows whether you're ahead or behind once the timer is running. Applies the next time you open preach mode."
+			)
+			.addDropdown((dropdown) =>
+				dropdown
+					.addOptions(SECTION_STRIP_OPTIONS)
+					.setValue(this.plugin.settings.sectionStrip)
+					.onChange((value) => {
+						void this.setControlValue("sectionStrip", value);
 					})
 			);
 
