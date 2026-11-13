@@ -427,6 +427,13 @@ test("hostile verse-only text yields nothing", () => {
 		"Smith v. 3M", "vs. 5", "vs 5", "dev 10", "v.3:16", "verse 12", "V8 engine"]) {
 		assert.deepEqual(tuples(t, COL), [], t);
 	}
+	for (const t of ["Back in Corinthians v.15", "Jude v.3", "Philemon v 10", "3 John v 5"]) {
+		assert.deepEqual(tuples(t, COL), [], t);
+	}
+	assert.deepEqual(tuples("is v.5", COL), [["v.5", "Colossians", 2, 5, 2, 5]]);
+	assert.deepEqual(tuples("v 1 John 4:8", COL), [["1 John 4:8", "1 John", 4, 8, 4, 8]]);
+	assert.deepEqual(tuples("v.2 Cor 5:17", COL), [["2 Cor 5:17", "2 Corinthians", 5, 17, 5, 17]]);
+	assert.deepEqual(tuples("compare v 2 Peter 1:3", COL), [["2 Peter 1:3", "2 Peter", 1, 3, 1, 3]]);
 	assert.deepEqual(tuples("Rev 5:1 v.2", COL), [
 		["Rev 5:1", "Revelation", 5, 1, 5, 1],
 		["v.2", "Colossians", 2, 2, 2, 2],
@@ -486,7 +493,8 @@ const keys = (rows) => rows.map((r) => `${r.chapter}:${r.verse}`);
 
 test("verses omitted inside a range are skipped, at the edges they still fail", async () => {
 	const app = fakeApp({
-		"B7/Mark/Mark 9.md": gappyChapter(9, without(range(1, 50), 44, 46)),
+		// 46 has a heading but no text, as in a translation that blanks the verse.
+		"B7/Mark/Mark 9.md": gappyChapter(9, without(range(1, 50), 44)).replace("###### 46\nc9v46 text\n", "###### 46\n"),
 		"B7/Mark/Mark 10.md": gappyChapter(10, range(1, 52)),
 		"B7/Matthew/Matt 17.md": gappyChapter(17, without(range(1, 27), 21)),
 	});

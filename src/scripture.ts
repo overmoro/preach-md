@@ -333,6 +333,12 @@ export function parseReferences(text: string, passages: ScriptureRef[] = []): Pa
 			const verseStart = parseInt(m[1], 10);
 			const chapter = verseChapter(passage, verseStart);
 			if (chapter === null) continue;
+			// "Corinthians v.15" or "Jude v.3": the verse belongs to that book, not the passage.
+			const before = /((?:[123]\s?)?[A-Z][a-z]+)\.?\s*$/.exec(text.slice(0, m.index));
+			if (before && (normaliseBook(before[1]) ?? normaliseBook(`1 ${before[1]}`))) continue;
+			const start = m.index;
+			const end = start + m[0].length;
+			if (results.some((r) => r.index < end && start < r.index + r.length)) continue;
 			results.push({
 				raw: m[0],
 				book: passage.book,

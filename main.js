@@ -955,6 +955,7 @@ function verseChapter(p, n) {
   return inFirst ? p.chapter : p.chapterEnd;
 }
 function parseReferences(text, passages = []) {
+  var _a;
   const results = [];
   SCRIPTURE_REGEX.lastIndex = 0;
   let m;
@@ -1020,6 +1021,13 @@ function parseReferences(text, passages = []) {
       const verseStart = parseInt(m[1], 10);
       const chapter = verseChapter(passage, verseStart);
       if (chapter === null)
+        continue;
+      const before = /((?:[123]\s?)?[A-Z][a-z]+)\.?\s*$/.exec(text.slice(0, m.index));
+      if (before && ((_a = normaliseBook(before[1])) != null ? _a : normaliseBook(`1 ${before[1]}`)))
+        continue;
+      const start = m.index;
+      const end = start + m[0].length;
+      if (results.some((r) => r.index < end && start < r.index + r.length))
         continue;
       results.push({
         raw: m[0],
