@@ -167,7 +167,9 @@ const BOOK_MAP: Record<string, BookName> = {
  * collide, but the guard covers the class rather than those two names.
  */
 export function normaliseBook(raw: string): BookName | null {
-	const key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+	let key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+	// Numbered abbreviations are keyed unspaced ("1jn"), so "1 Jn" retries without the space.
+	if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key)) key = key.replace(/^([123]) /, "$1");
 	if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key)) return null;
 	return BOOK_MAP[key] ?? null;
 }
@@ -276,6 +278,8 @@ export function parseReferences(text: string, passages: ScriptureRef[] = []): Pa
 			const candidate = words.slice(w).join(" ");
 			const resolved = normaliseBook(candidate);
 			if (resolved !== null) {
+				// Dropping the number must never turn "2 Jo" into John.
+				if (w === 1 && /^[123]$/.test(words[0]) && NUMBERED_STEMS.has(resolved)) break;
 				book = resolved;
 				offset = rawBook.length - candidate.length;
 				break;
@@ -583,6 +587,9 @@ CANON_ROWS.forEach((row, index) => {
 		singleChapter: row[2] === SINGLE_CHAPTER,
 	});
 });
+
+/** Books that exist in numbered form ("John", "Samuel"...), derived from CANON. */
+const NUMBERED_STEMS = new Set([...BOOKS.keys()].filter((b) => /^[123] /.test(b)).map((b) => b.slice(2)));
 
 /**
  * Build candidate vault paths to a chapter file, in priority order.

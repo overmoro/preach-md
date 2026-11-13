@@ -373,7 +373,9 @@ var BOOK_MAP = {
 };
 function normaliseBook(raw) {
   var _a;
-  const key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+  let key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key))
+    key = key.replace(/^([123]) /, "$1");
   if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key))
     return null;
   return (_a = BOOK_MAP[key]) != null ? _a : null;
@@ -408,6 +410,8 @@ function parseReferences(text, passages = []) {
       const candidate = words.slice(w).join(" ");
       const resolved = normaliseBook(candidate);
       if (resolved !== null) {
+        if (w === 1 && /^[123]$/.test(words[0]) && NUMBERED_STEMS.has(resolved))
+          break;
         book = resolved;
         offset = rawBook.length - candidate.length;
         break;
@@ -588,6 +592,7 @@ CANON_ROWS.forEach((row, index) => {
     singleChapter: row[2] === SINGLE_CHAPTER
   });
 });
+var NUMBERED_STEMS = new Set([...BOOKS.keys()].filter((b) => /^[123] /.test(b)).map((b) => b.slice(2)));
 function chapterPaths(csbFolder, book, chapter) {
   var _a;
   const meta = BOOKS.get(book);

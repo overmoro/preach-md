@@ -410,6 +410,28 @@ test("dotted book abbreviations are detected, with the raw dot", () => {
 	assert.deepEqual(tuples("Rom. 8:28; 10:9"), [r("Rom. 8:28", "Romans", 8, 28), r("10:9", "Romans", 10, 9)]);
 });
 
+test("spaced numbered abbreviations keep their number", () => {
+	const cases = {
+		"1 Jn": "1 John", "2 Jn": "2 John", "3 Jn": "3 John", "1 Jo": "1 John",
+		"1 Th": "1 Thessalonians", "2 Th": "2 Thessalonians", "1 Pe": "1 Peter", "2 Pe": "2 Peter",
+		"1 Pt": "1 Peter", "1 Ti": "1 Timothy", "2 Ti": "2 Timothy", "1 Co": "1 Corinthians",
+		"2 Co": "2 Corinthians", "1 Sa": "1 Samuel", "2 Ki": "2 Kings", "1 Ch": "1 Chronicles",
+	};
+	for (const [abbr, book] of Object.entries(cases)) {
+		assert.equal(normaliseBook(abbr), book, abbr);
+		assert.deepEqual(tuples(`${abbr} 3:11`), [[`${abbr} 3:11`, book, 3, 11, 3, 11]], abbr);
+	}
+	assert.deepEqual(tuples("1 Jn 3:11, 4:7"), [
+		["1 Jn 3:11", "1 John", 3, 11, 3, 11],
+		["4:7", "1 John", 4, 7, 4, 7],
+	]);
+	// A number with no such book must not fall through to the unnumbered one.
+	for (const t of ["2 Jo 3:4", "3 Jo 3:4"]) {
+		assert.deepEqual(tuples(t), [], t);
+	}
+	assert.deepEqual(tuples("Jn 3:11"), [["Jn 3:11", "John", 3, 11, 3, 11]]);
+});
+
 test("is, am and mr never make a dotted reference", () => {
 	assert.deepEqual(tuples("Mr. 5:30 said"), []);
 	assert.deepEqual(tuples("I am. 10:30 we start"), []);
