@@ -1263,11 +1263,14 @@ var PreachMDSettingTab = class extends import_obsidian2.PluginSettingTab {
       })
     );
     new import_obsidian2.Setting(containerEl).setName("Display").setHeading();
-    new import_obsidian2.Setting(containerEl).setName("Text size (%)").setDesc("Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.").addText(
-      (text) => text.setPlaceholder("100").setValue(String(this.plugin.settings.textScalePercent)).onChange((value) => {
+    new import_obsidian2.Setting(containerEl).setName("Text size (%)").setDesc("Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.").addText((text) => {
+      text.setPlaceholder("100").setValue(String(this.plugin.settings.textScalePercent)).onChange((value) => {
         void this.setControlValue("textScalePercent", value);
-      })
-    );
+      });
+      text.inputEl.addEventListener("blur", () => {
+        text.setValue(String(this.plugin.settings.textScalePercent));
+      });
+    });
     new import_obsidian2.Setting(containerEl).setName("Scripture").setHeading();
     new import_obsidian2.Setting(containerEl).setName("Bible folder path").setDesc(
       'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file. Checked before the offline Bible.'

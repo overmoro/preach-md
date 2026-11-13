@@ -435,14 +435,18 @@ export class PreachMDSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Text size (%)")
 			.setDesc("Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.")
-			.addText((text) =>
+			.addText((text) => {
 				text
 					.setPlaceholder("100")
 					.setValue(String(this.plugin.settings.textScalePercent))
 					.onChange((value) => {
 						void this.setControlValue("textScalePercent", value);
-					})
-			);
+					});
+				// Out-of-range input is ignored while typing, so show what was kept
+				text.inputEl.addEventListener("blur", () => {
+					text.setValue(String(this.plugin.settings.textScalePercent));
+				});
+			});
 
 		// Scripture
 		new Setting(containerEl).setName("Scripture").setHeading();
