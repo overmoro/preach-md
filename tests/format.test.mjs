@@ -47,3 +47,8 @@ test("markCandidates proposes one edit per identical highlight", () => {
 		"==\u{1F534}a== and ==\u{1F535}a==",
 	]);
 });
+
+test("markCandidates handles a plain highlight", () => {
+	assert.deepEqual(markCandidates("x ==Grace== y", "Grace", "red"), ["x ==\u{1F534}Grace== y"]);
+	assert.deepEqual(markCandidates("x ==Grace== y", "Grace", null), ["x Grace y"]);
+});
