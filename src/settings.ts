@@ -31,9 +31,19 @@ function field(raw: object, key: string): unknown {
 }
 
 /** A whole number within range, or undefined if the stored value is unusable. */
-function boundedInt(value: unknown, min: number, max: number): number | undefined {
+export function boundedInt(value: unknown, min: number, max: number): number | undefined {
 	if (typeof value !== "number" || !Number.isInteger(value)) return undefined;
 	return value >= min && value <= max ? value : undefined;
+}
+
+const MAX_MINUTES = 24 * 60;
+
+/** Timer length from a note's `preach-minutes` frontmatter, or the fallback if absent or invalid. */
+export function noteTargetMinutes(frontmatter: unknown, fallback: number): number {
+	if (typeof frontmatter !== "object" || frontmatter === null) return fallback;
+	let value = field(frontmatter, "preach-minutes");
+	if (typeof value === "string" && value.trim() !== "") value = Number(value);
+	return boundedInt(value, 1, MAX_MINUTES) ?? fallback;
 }
 
 /**
@@ -51,13 +61,13 @@ export function parseStoredSettings(raw: unknown): Partial<PreachMDSettings> {
 
 	// No sensible upper bound on a sermon length, so cap generously rather than
 	// invent a limit that would silently discard a legitimate value.
-	const targetMinutes = boundedInt(field(raw, "targetMinutes"), 1, 24 * 60);
+	const targetMinutes = boundedInt(field(raw, "targetMinutes"), 1, MAX_MINUTES);
 	if (targetMinutes !== undefined) out.targetMinutes = targetMinutes;
 
-	const warnMinutes = boundedInt(field(raw, "warnMinutes"), 1, 24 * 60);
+	const warnMinutes = boundedInt(field(raw, "warnMinutes"), 1, MAX_MINUTES);
 	if (warnMinutes !== undefined) out.warnMinutes = warnMinutes;
 
-	const critMinutes = boundedInt(field(raw, "critMinutes"), 1, 24 * 60);
+	const critMinutes = boundedInt(field(raw, "critMinutes"), 1, MAX_MINUTES);
 	if (critMinutes !== undefined) out.critMinutes = critMinutes;
 
 	// Matches the range the settings controls accept.
