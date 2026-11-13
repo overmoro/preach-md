@@ -2,7 +2,7 @@
 // Provides bold, italic, underline, and highlight wrapping applied directly
 // to the source file from selected text in the preach view.
 
-import { App, TFile } from "obsidian";
+import { App, TFile, requireApiVersion } from "obsidian";
 import type { Block } from "./highlight";
 
 export interface FormatWrapper {
@@ -14,6 +14,60 @@ export const FORMAT_BOLD: FormatWrapper = { open: "**", close: "**" };
 export const FORMAT_ITALIC: FormatWrapper = { open: "*", close: "*" };
 export const FORMAT_UNDERLINE: FormatWrapper = { open: "<u>", close: "</u>" };
 export const FORMAT_HIGHLIGHT: FormatWrapper = { open: "==", close: "==" };
+
+/** Obsidian 1.14 reads a leading colour emoji inside == == as the highlight colour. */
+export const HIGHLIGHT_COLOURS = [
+	{ name: "red", emoji: "🔴" },
+	{ name: "orange", emoji: "🟠" },
+	{ name: "yellow", emoji: "🟡" },
+	{ name: "green", emoji: "🟢" },
+	{ name: "blue", emoji: "🔵" },
+	{ name: "purple", emoji: "🟣" },
+] as const;
+
+export type HighlightColour = (typeof HIGHLIGHT_COLOURS)[number]["name"];
+
+// Obsidian also accepts the square emoji; recolouring has to recognise them.
+const SQUARE_EMOJI: Record<string, HighlightColour> = {
+	"🟥": "red", "🟧": "orange", "🟨": "yellow", "🟩": "green", "🟦": "blue", "🟪": "purple",
+};
+
+const EMOJI_COLOUR: [string, HighlightColour][] = [
+	...HIGHLIGHT_COLOURS.map((c): [string, HighlightColour] => [c.emoji, c.name]),
+	...Object.entries(SQUARE_EMOJI),
+];
+
+export function highlightColoursSupported(): boolean {
+	return requireApiVersion("1.14.0");
+}
+
+/**
+ * Highlight data[start, end) with `colour` (null for the plain default).
+ * Text that is exactly the content of an existing highlight is recoloured, or
+ * unwrapped when it already has that colour. Anything else is wrapped.
+ */
+export function applyHighlight(
+	data: string,
+	start: number,
+	end: number,
+	colour: HighlightColour | null
+): string {
+	const body = data.slice(start, end);
+	const before = data.slice(0, start);
+	const after = data.slice(end);
+	const mark = colour ? HIGHLIGHT_COLOURS.find((c) => c.name === colour)?.emoji ?? "" : "";
+
+	if (after.startsWith("==")) {
+		const found = EMOJI_COLOUR.find(([e]) => before.endsWith("==" + e));
+		if (found || before.endsWith("==")) {
+			const current = found ? found[1] : null;
+			const head = before.slice(0, before.length - 2 - (found ? found[0].length : 0));
+			const tail = after.slice(2);
+			return current === colour ? head + body + tail : head + "==" + mark + body + "==" + tail;
+		}
+	}
+	return before + "==" + mark + body + "==" + after;
+}
 
 /** Result returned by captureFromSelection. */
 export interface CaptureResult {
@@ -162,6 +216,7 @@ export class FormatManager {
 		const after = sourceContent.slice(sourceIdx + selectedText.length);
 		const wrappers = ["**", "*", "==", "<u>"];
 		for (const w of wrappers) {
+			if (w === "==" && highlightColoursSupported()) continue;
 			if (before.endsWith(w) && after.startsWith(w === "**" ? "**" : w === "*" ? "*" : w === "==" ? "==" : "</u>")) {
 				this.showFormatFailNotice("collision", range.getBoundingClientRect());
 				return null;
@@ -178,7 +233,10 @@ export class FormatManager {
 	 * Apply a format wrapper around the previously captured selection.
 	 * Writes to the source file via vault.process().
 	 */
-	async applyFormat(wrapper: FormatWrapper): Promise<void> {
+	async applyFormat(
+		wrapper: FormatWrapper,
+		edit?: (data: string, start: number, end: number) => string
+	): Promise<void> {
 		if (!this.capturedSelection || !this.file) return;
 
 		const { text: selectedText, blockIndex } = this.capturedSelection;
@@ -215,6 +273,7 @@ export class FormatManager {
 		const absoluteEnd = absoluteStart + selectedText.length;
 
 		await this.app.vault.process(this.file, (data) => {
+			if (edit) return edit(data, absoluteStart, absoluteEnd);
 			return (
 				data.slice(0, absoluteStart) +
 				wrapper.open +
@@ -383,13 +442,18 @@ export class PreachFormatToolbar {
 		const bar = parent.createDiv({ cls: "preach-inline-format-bar" });
 		bar.setAttribute("aria-label", "Format selection");
 
+		const colours = highlightColoursSupported();
+		const mainRow = bar.createDiv({ cls: "preach-inline-fmt-row" });
+
 		const makeBtn = (
 			label: string,
 			title: string,
 			wrapper: FormatWrapper,
-			extraClass?: string
+			extraClass?: string,
+			edit?: (data: string, start: number, end: number) => string,
+			row: HTMLElement = mainRow
 		): void => {
-			const btn = bar.createEl("button", {
+			const btn = row.createEl("button", {
 				cls: "preach-inline-fmt-btn" + (extraClass ? " " + extraClass : ""),
 			});
 			btn.setAttribute("aria-label", title);
@@ -417,7 +481,7 @@ export class PreachFormatToolbar {
 					return;
 				}
 				// Apply asynchronously
-				void this.formatManager.applyFormat(wrapper).then(() => {
+				void this.formatManager.applyFormat(wrapper, edit).then(() => {
 					this.hide();
 					window.getSelection()?.removeAllRanges();
 				});
@@ -427,7 +491,27 @@ export class PreachFormatToolbar {
 		makeBtn("B", "Bold", FORMAT_BOLD, "preach-inline-fmt-btn--bold");
 		makeBtn("I", "Italic", FORMAT_ITALIC, "preach-inline-fmt-btn--italic");
 		makeBtn("U", "Underline", FORMAT_UNDERLINE, "preach-inline-fmt-btn--underline");
-		makeBtn("H", "Highlight", FORMAT_HIGHLIGHT, "preach-inline-fmt-btn--highlight");
+		makeBtn(
+			"H",
+			"Highlight",
+			FORMAT_HIGHLIGHT,
+			"preach-inline-fmt-btn--highlight",
+			colours ? (d, a, b) => applyHighlight(d, a, b, null) : undefined
+		);
+
+		if (colours) {
+			const colourRow = bar.createDiv({ cls: "preach-inline-fmt-row" });
+			for (const c of HIGHLIGHT_COLOURS) {
+				makeBtn(
+					c.emoji,
+					`Highlight ${c.name}`,
+					FORMAT_HIGHLIGHT,
+					"preach-inline-fmt-btn--colour",
+					(d, a, b) => applyHighlight(d, a, b, c.name),
+					colourRow
+				);
+			}
+		}
 
 		return bar;
 	}

@@ -28,10 +28,10 @@ __export(main_exports, {
   default: () => PreachMDPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 
 // src/preach-view.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 
 // src/timer.ts
 var PreachTimer = class {
@@ -1000,10 +1000,51 @@ var ScriptureExpander = class {
 };
 
 // src/format.ts
+var import_obsidian2 = require("obsidian");
 var FORMAT_BOLD = { open: "**", close: "**" };
 var FORMAT_ITALIC = { open: "*", close: "*" };
 var FORMAT_UNDERLINE = { open: "<u>", close: "</u>" };
 var FORMAT_HIGHLIGHT = { open: "==", close: "==" };
+var HIGHLIGHT_COLOURS = [
+  { name: "red", emoji: "\u{1F534}" },
+  { name: "orange", emoji: "\u{1F7E0}" },
+  { name: "yellow", emoji: "\u{1F7E1}" },
+  { name: "green", emoji: "\u{1F7E2}" },
+  { name: "blue", emoji: "\u{1F535}" },
+  { name: "purple", emoji: "\u{1F7E3}" }
+];
+var SQUARE_EMOJI = {
+  "\u{1F7E5}": "red",
+  "\u{1F7E7}": "orange",
+  "\u{1F7E8}": "yellow",
+  "\u{1F7E9}": "green",
+  "\u{1F7E6}": "blue",
+  "\u{1F7EA}": "purple"
+};
+var EMOJI_COLOUR = [
+  ...HIGHLIGHT_COLOURS.map((c) => [c.emoji, c.name]),
+  ...Object.entries(SQUARE_EMOJI)
+];
+function highlightColoursSupported() {
+  return (0, import_obsidian2.requireApiVersion)("1.14.0");
+}
+function applyHighlight(data, start, end, colour) {
+  var _a, _b;
+  const body = data.slice(start, end);
+  const before = data.slice(0, start);
+  const after = data.slice(end);
+  const mark = colour ? (_b = (_a = HIGHLIGHT_COLOURS.find((c) => c.name === colour)) == null ? void 0 : _a.emoji) != null ? _b : "" : "";
+  if (after.startsWith("==")) {
+    const found = EMOJI_COLOUR.find(([e]) => before.endsWith("==" + e));
+    if (found || before.endsWith("==")) {
+      const current = found ? found[1] : null;
+      const head = before.slice(0, before.length - 2 - (found ? found[0].length : 0));
+      const tail = after.slice(2);
+      return current === colour ? head + body + tail : head + "==" + mark + body + "==" + tail;
+    }
+  }
+  return before + "==" + mark + body + "==" + after;
+}
 var FORMAT_FAIL_MESSAGE = {
   "scripture-expand": "Can't format inside an expanded passage.",
   "cross-block": "Can't format across two paragraphs.",
@@ -1111,6 +1152,8 @@ var FormatManager = class {
     const after = sourceContent.slice(sourceIdx + selectedText.length);
     const wrappers = ["**", "*", "==", "<u>"];
     for (const w of wrappers) {
+      if (w === "==" && highlightColoursSupported())
+        continue;
       if (before.endsWith(w) && after.startsWith(w === "**" ? "**" : w === "*" ? "*" : w === "==" ? "==" : "</u>")) {
         this.showFormatFailNotice("collision", range.getBoundingClientRect());
         return null;
@@ -1124,7 +1167,7 @@ var FormatManager = class {
    * Apply a format wrapper around the previously captured selection.
    * Writes to the source file via vault.process().
    */
-  async applyFormat(wrapper) {
+  async applyFormat(wrapper, edit) {
     if (!this.capturedSelection || !this.file)
       return;
     const { text: selectedText, blockIndex } = this.capturedSelection;
@@ -1154,6 +1197,8 @@ var FormatManager = class {
     const absoluteStart = block.startOffset + sourceIdx;
     const absoluteEnd = absoluteStart + selectedText.length;
     await this.app.vault.process(this.file, (data) => {
+      if (edit)
+        return edit(data, absoluteStart, absoluteEnd);
       return data.slice(0, absoluteStart) + wrapper.open + data.slice(absoluteStart, absoluteEnd) + wrapper.close + data.slice(absoluteEnd);
     });
     this.capturedSelection = null;
@@ -1266,8 +1311,10 @@ var PreachFormatToolbar = class {
   buildToolbar(parent) {
     const bar = parent.createDiv({ cls: "preach-inline-format-bar" });
     bar.setAttribute("aria-label", "Format selection");
-    const makeBtn = (label, title, wrapper, extraClass) => {
-      const btn = bar.createEl("button", {
+    const colours = highlightColoursSupported();
+    const mainRow = bar.createDiv({ cls: "preach-inline-fmt-row" });
+    const makeBtn = (label, title, wrapper, extraClass, edit, row = mainRow) => {
+      const btn = row.createEl("button", {
         cls: "preach-inline-fmt-btn" + (extraClass ? " " + extraClass : "")
       });
       btn.setAttribute("aria-label", title);
@@ -1290,7 +1337,7 @@ var PreachFormatToolbar = class {
           this.hide();
           return;
         }
-        void this.formatManager.applyFormat(wrapper).then(() => {
+        void this.formatManager.applyFormat(wrapper, edit).then(() => {
           var _a;
           this.hide();
           (_a = window.getSelection()) == null ? void 0 : _a.removeAllRanges();
@@ -1300,7 +1347,26 @@ var PreachFormatToolbar = class {
     makeBtn("B", "Bold", FORMAT_BOLD, "preach-inline-fmt-btn--bold");
     makeBtn("I", "Italic", FORMAT_ITALIC, "preach-inline-fmt-btn--italic");
     makeBtn("U", "Underline", FORMAT_UNDERLINE, "preach-inline-fmt-btn--underline");
-    makeBtn("H", "Highlight", FORMAT_HIGHLIGHT, "preach-inline-fmt-btn--highlight");
+    makeBtn(
+      "H",
+      "Highlight",
+      FORMAT_HIGHLIGHT,
+      "preach-inline-fmt-btn--highlight",
+      colours ? (d, a, b) => applyHighlight(d, a, b, null) : void 0
+    );
+    if (colours) {
+      const colourRow = bar.createDiv({ cls: "preach-inline-fmt-row" });
+      for (const c of HIGHLIGHT_COLOURS) {
+        makeBtn(
+          c.emoji,
+          `Highlight ${c.name}`,
+          FORMAT_HIGHLIGHT,
+          "preach-inline-fmt-btn--colour",
+          (d, a, b) => applyHighlight(d, a, b, c.name),
+          colourRow
+        );
+      }
+    }
     return bar;
   }
   onSelectionChange() {
@@ -1389,7 +1455,7 @@ function extractHeadings(markdown, level) {
   }
   return results;
 }
-var PreachView = class extends import_obsidian2.ItemView {
+var PreachView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.file = null;
@@ -1444,7 +1510,7 @@ var PreachView = class extends import_obsidian2.ItemView {
       ws.leftSplit.collapse();
     if (this.rightSplitWasOpen)
       ws.rightSplit.collapse();
-    this.renderComponent = new import_obsidian2.Component();
+    this.renderComponent = new import_obsidian3.Component();
     this.renderComponent.load();
     this.highlightManager = new HighlightManager(
       this.app,
@@ -1645,7 +1711,7 @@ var PreachView = class extends import_obsidian2.ItemView {
           "data-highlightable": block.highlightable ? "true" : "false"
         }
       });
-      await import_obsidian2.MarkdownRenderer.render(
+      await import_obsidian3.MarkdownRenderer.render(
         this.app,
         block.content,
         wrapper,
@@ -1944,7 +2010,7 @@ var PreachView = class extends import_obsidian2.ItemView {
 };
 
 // src/settings.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 var DEFAULT_SETTINGS = {
   targetMinutes: 30,
   warnMinutes: 5,
@@ -1981,7 +2047,7 @@ function parseStoredSettings(raw) {
     out.csbFolderPath = csbFolderPath.trim();
   return out;
 }
-var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
+var PreachMDSettingTab = class extends import_obsidian4.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -2113,8 +2179,8 @@ var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
   display() {
     const { containerEl } = this;
     containerEl.empty();
-    new import_obsidian3.Setting(containerEl).setName("Timer").setHeading();
-    new import_obsidian3.Setting(containerEl).setName("Target duration (minutes)").setDesc("The countdown starts from this value.").addText(
+    new import_obsidian4.Setting(containerEl).setName("Timer").setHeading();
+    new import_obsidian4.Setting(containerEl).setName("Target duration (minutes)").setDesc("The countdown starts from this value.").addText(
       (text) => text.setPlaceholder("30").setValue(String(this.plugin.settings.targetMinutes)).onChange((value) => {
         const n = parseInt(value, 10);
         if (!isNaN(n) && n > 0) {
@@ -2123,7 +2189,7 @@ var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
         }
       })
     );
-    new import_obsidian3.Setting(containerEl).setName("Amber warning (minutes remaining)").setDesc("Timer turns amber when this many minutes remain.").addText(
+    new import_obsidian4.Setting(containerEl).setName("Amber warning (minutes remaining)").setDesc("Timer turns amber when this many minutes remain.").addText(
       (text) => text.setPlaceholder("5").setValue(String(this.plugin.settings.warnMinutes)).onChange((value) => {
         const n = parseInt(value, 10);
         if (!isNaN(n) && n > 0) {
@@ -2132,7 +2198,7 @@ var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
         }
       })
     );
-    new import_obsidian3.Setting(containerEl).setName("Red warning (minutes remaining)").setDesc("Timer turns red when this many minutes remain.").addText(
+    new import_obsidian4.Setting(containerEl).setName("Red warning (minutes remaining)").setDesc("Timer turns red when this many minutes remain.").addText(
       (text) => text.setPlaceholder("1").setValue(String(this.plugin.settings.critMinutes)).onChange((value) => {
         const n = parseInt(value, 10);
         if (!isNaN(n) && n > 0) {
@@ -2141,8 +2207,8 @@ var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
         }
       })
     );
-    new import_obsidian3.Setting(containerEl).setName("Navigation").setHeading();
-    new import_obsidian3.Setting(containerEl).setName("Section heading level").setDesc(
+    new import_obsidian4.Setting(containerEl).setName("Navigation").setHeading();
+    new import_obsidian4.Setting(containerEl).setName("Section heading level").setDesc(
       "Heading level used to build the outline (2 = ##, 3 = ###)."
     ).addText(
       (text) => text.setPlaceholder("2").setValue(String(this.plugin.settings.sectionHeadingLevel)).onChange((value) => {
@@ -2153,8 +2219,8 @@ var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
         }
       })
     );
-    new import_obsidian3.Setting(containerEl).setName("Scripture").setHeading();
-    new import_obsidian3.Setting(containerEl).setName("Bible folder path").setDesc(
+    new import_obsidian4.Setting(containerEl).setName("Scripture").setHeading();
+    new import_obsidian4.Setting(containerEl).setName("Bible folder path").setDesc(
       'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file.'
     ).addText(
       (text) => text.setPlaceholder("30_Knowledge/Theology/Bible/CSB").setValue(this.plugin.settings.csbFolderPath).onChange((value) => {
@@ -2166,7 +2232,7 @@ var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
 };
 
 // src/main.ts
-var PreachMDPlugin = class extends import_obsidian4.Plugin {
+var PreachMDPlugin = class extends import_obsidian5.Plugin {
   async onload() {
     await this.loadSettings();
     this.registerView(

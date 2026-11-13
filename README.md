@@ -47,6 +47,10 @@ Alternatively, on iPad: Settings → Community plugins → Browse → search "Pr
 | Top-centre | Timer | Countdown from target duration. Single tap pauses/resumes. Double-tap resets. Counts up in red after reaching zero. |
 | Bottom-right | Edit | Switches to edit mode at the current scroll position. |
 
+### Highlight colours
+
+On Obsidian 1.14 or later, the format toolbar adds a row of six colours (red, orange, yellow, green, blue, purple) under the highlight button. The colour is stored as a leading emoji inside the highlight (`==🔴text==`), so it shows in Obsidian's own editor too. Tapping a colour on already highlighted text recolours it, and tapping the same colour again removes the highlight.
+
 ### Scripture expansion
 
 When preach mode is open, detected Bible references appear with a dotted underline. Tap a reference to expand the passage inline. The verse text is read from your vault Bible files (configurable in settings). Tap the expanded passage to collapse it.
