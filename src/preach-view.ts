@@ -430,7 +430,7 @@ export class PreachView extends ItemView {
 		this.resetIdleTimer();
 	}
 
-	private applyTextScale(): void {
+	applyTextScale(): void {
 		this.containerEl.setCssProps({
 			"--preach-text-scale": String(this.plugin.settings.textScalePercent / 100),
 		});

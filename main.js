@@ -2855,6 +2855,9 @@ var PreachMDPlugin = class extends import_obsidian5.Plugin {
   }
   async saveSettings() {
     await this.saveData(this.settings);
+    for (const leaf of this.app.workspace.getLeavesOfType(PREACH_VIEW_TYPE)) {
+      leaf.view.applyTextScale();
+    }
   }
   async openPreachMode() {
     var _a;
