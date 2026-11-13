@@ -31,7 +31,7 @@ module.exports = __toCommonJS(main_exports);
 var import_obsidian4 = require("obsidian");
 
 // src/preach-view.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 
 // src/timer.ts
 var PreachTimer = class {
@@ -168,6 +168,238 @@ var PreachTimer = class {
     } else {
       this.labelEl.textContent = "Resume | reset";
     }
+  }
+};
+
+// src/settings.ts
+var import_obsidian = require("obsidian");
+var DEFAULT_SETTINGS = {
+  targetMinutes: 30,
+  warnMinutes: 5,
+  critMinutes: 1,
+  sectionHeadingLevel: 2,
+  csbFolderPath: "30_Knowledge/Theology/Bible/CSB"
+};
+function field(raw, key) {
+  return raw[key];
+}
+function boundedInt(value, min, max) {
+  if (typeof value !== "number" || !Number.isInteger(value))
+    return void 0;
+  return value >= min && value <= max ? value : void 0;
+}
+var MAX_MINUTES = 24 * 60;
+function noteTargetMinutes(frontmatter, fallback) {
+  var _a;
+  if (typeof frontmatter !== "object" || frontmatter === null)
+    return fallback;
+  let value = field(frontmatter, "preach-minutes");
+  if (typeof value === "string" && value.trim() !== "")
+    value = Number(value);
+  return (_a = boundedInt(value, 1, MAX_MINUTES)) != null ? _a : fallback;
+}
+function parseStoredSettings(raw) {
+  if (typeof raw !== "object" || raw === null)
+    return {};
+  const out = {};
+  const targetMinutes = boundedInt(field(raw, "targetMinutes"), 1, MAX_MINUTES);
+  if (targetMinutes !== void 0)
+    out.targetMinutes = targetMinutes;
+  const warnMinutes = boundedInt(field(raw, "warnMinutes"), 1, MAX_MINUTES);
+  if (warnMinutes !== void 0)
+    out.warnMinutes = warnMinutes;
+  const critMinutes = boundedInt(field(raw, "critMinutes"), 1, MAX_MINUTES);
+  if (critMinutes !== void 0)
+    out.critMinutes = critMinutes;
+  const sectionHeadingLevel = boundedInt(field(raw, "sectionHeadingLevel"), 1, 6);
+  if (sectionHeadingLevel !== void 0)
+    out.sectionHeadingLevel = sectionHeadingLevel;
+  const csbFolderPath = field(raw, "csbFolderPath");
+  if (typeof csbFolderPath === "string")
+    out.csbFolderPath = csbFolderPath.trim();
+  return out;
+}
+var PreachMDSettingTab = class extends import_obsidian.PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+  /**
+   * Declarative mirror of display(), so these settings are reachable from
+   * Obsidian's settings search on 1.13 and later.
+   *
+   * Added alongside display() rather than replacing it. Older Obsidian never
+   * calls this method, so minAppVersion stays at 1.4.0 and nobody is dropped
+   * for the sake of search.
+   */
+  getSettingDefinitions() {
+    return [
+      {
+        type: "group",
+        heading: "Timer",
+        items: [
+          {
+            name: "Target duration (minutes)",
+            desc: "The countdown starts from this value.",
+            aliases: ["countdown", "length", "sermon length"],
+            control: {
+              type: "number",
+              key: "targetMinutes",
+              defaultValue: DEFAULT_SETTINGS.targetMinutes,
+              placeholder: String(DEFAULT_SETTINGS.targetMinutes),
+              min: 1
+            }
+          },
+          {
+            name: "Amber warning (minutes remaining)",
+            desc: "Timer turns amber when this many minutes remain.",
+            aliases: ["warning", "orange"],
+            control: {
+              type: "number",
+              key: "warnMinutes",
+              defaultValue: DEFAULT_SETTINGS.warnMinutes,
+              placeholder: String(DEFAULT_SETTINGS.warnMinutes),
+              min: 1
+            }
+          },
+          {
+            name: "Red warning (minutes remaining)",
+            desc: "Timer turns red when this many minutes remain.",
+            aliases: ["warning", "critical"],
+            control: {
+              type: "number",
+              key: "critMinutes",
+              defaultValue: DEFAULT_SETTINGS.critMinutes,
+              placeholder: String(DEFAULT_SETTINGS.critMinutes),
+              min: 1
+            }
+          }
+        ]
+      },
+      {
+        type: "group",
+        heading: "Navigation",
+        items: [
+          {
+            name: "Section heading level",
+            desc: "Heading level used to build the outline (2 = ##, 3 = ###).",
+            aliases: ["outline", "sections"],
+            control: {
+              type: "number",
+              key: "sectionHeadingLevel",
+              defaultValue: DEFAULT_SETTINGS.sectionHeadingLevel,
+              placeholder: String(DEFAULT_SETTINGS.sectionHeadingLevel),
+              min: 1,
+              max: 6
+            }
+          }
+        ]
+      },
+      {
+        type: "group",
+        heading: "Scripture",
+        items: [
+          {
+            name: "Bible folder path",
+            desc: 'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file.',
+            aliases: ["bible", "csb", "scripture", "verses"],
+            control: {
+              type: "text",
+              key: "csbFolderPath",
+              defaultValue: DEFAULT_SETTINGS.csbFolderPath,
+              placeholder: DEFAULT_SETTINGS.csbFolderPath
+            }
+          }
+        ]
+      }
+    ];
+  }
+  /**
+   * Applies the same validation the imperative controls in display() apply,
+   * so a value typed into settings search cannot land somewhere the
+   * hand-built inputs would have rejected. An out-of-range value is ignored
+   * rather than clamped, matching display()'s behaviour of simply not
+   * assigning.
+   */
+  setControlValue(key, value) {
+    const settings = this.plugin.settings;
+    switch (key) {
+      case "targetMinutes":
+      case "warnMinutes":
+      case "critMinutes": {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n <= 0)
+          return;
+        settings[key] = n;
+        break;
+      }
+      case "sectionHeadingLevel": {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n < 1 || n > 6)
+          return;
+        settings.sectionHeadingLevel = n;
+        break;
+      }
+      case "csbFolderPath":
+        settings.csbFolderPath = String(value).trim();
+        break;
+      default:
+        return;
+    }
+    return this.plugin.saveSettings();
+  }
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    new import_obsidian.Setting(containerEl).setName("Timer").setHeading();
+    new import_obsidian.Setting(containerEl).setName("Target duration (minutes)").setDesc("The countdown starts from this value.").addText(
+      (text) => text.setPlaceholder("30").setValue(String(this.plugin.settings.targetMinutes)).onChange((value) => {
+        const n = parseInt(value, 10);
+        if (!isNaN(n) && n > 0) {
+          this.plugin.settings.targetMinutes = n;
+          void this.plugin.saveSettings();
+        }
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("Amber warning (minutes remaining)").setDesc("Timer turns amber when this many minutes remain.").addText(
+      (text) => text.setPlaceholder("5").setValue(String(this.plugin.settings.warnMinutes)).onChange((value) => {
+        const n = parseInt(value, 10);
+        if (!isNaN(n) && n > 0) {
+          this.plugin.settings.warnMinutes = n;
+          void this.plugin.saveSettings();
+        }
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("Red warning (minutes remaining)").setDesc("Timer turns red when this many minutes remain.").addText(
+      (text) => text.setPlaceholder("1").setValue(String(this.plugin.settings.critMinutes)).onChange((value) => {
+        const n = parseInt(value, 10);
+        if (!isNaN(n) && n > 0) {
+          this.plugin.settings.critMinutes = n;
+          void this.plugin.saveSettings();
+        }
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("Navigation").setHeading();
+    new import_obsidian.Setting(containerEl).setName("Section heading level").setDesc(
+      "Heading level used to build the outline (2 = ##, 3 = ###)."
+    ).addText(
+      (text) => text.setPlaceholder("2").setValue(String(this.plugin.settings.sectionHeadingLevel)).onChange((value) => {
+        const n = parseInt(value, 10);
+        if (!isNaN(n) && n >= 1 && n <= 6) {
+          this.plugin.settings.sectionHeadingLevel = n;
+          void this.plugin.saveSettings();
+        }
+      })
+    );
+    new import_obsidian.Setting(containerEl).setName("Scripture").setHeading();
+    new import_obsidian.Setting(containerEl).setName("Bible folder path").setDesc(
+      'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file.'
+    ).addText(
+      (text) => text.setPlaceholder("30_Knowledge/Theology/Bible/CSB").setValue(this.plugin.settings.csbFolderPath).onChange((value) => {
+        this.plugin.settings.csbFolderPath = value.trim();
+        void this.plugin.saveSettings();
+      })
+    );
   }
 };
 
@@ -320,7 +552,7 @@ var HighlightManager = class {
 };
 
 // src/scripture.ts
-var import_obsidian = require("obsidian");
+var import_obsidian2 = require("obsidian");
 var BOOK_MAP = {
   // Genesis
   genesis: "Genesis",
@@ -837,7 +1069,7 @@ async function loadChapter(app, csbFolder, book, chapter) {
       return verseCache.get(path);
     }
     const file = app.vault.getAbstractFileByPath(path);
-    if (!file || !(file instanceof import_obsidian.TFile))
+    if (!file || !(file instanceof import_obsidian2.TFile))
       continue;
     const content = await app.vault.read(file);
     const map = parseChapterFile(content);
@@ -962,7 +1194,7 @@ var ScriptureExpander = class {
       for (const { verse, text } of verses) {
         passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: String(verse) });
         const tmp = createDiv();
-        await import_obsidian.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
+        await import_obsidian2.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
         const nodes = Array.from(tmp.childNodes);
         for (const node of nodes) {
           if (node.instanceOf(HTMLElement) && node.tagName === "P") {
@@ -1389,7 +1621,7 @@ function extractHeadings(markdown, level) {
   }
   return results;
 }
-var PreachView = class extends import_obsidian2.ItemView {
+var PreachView = class extends import_obsidian3.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.file = null;
@@ -1444,7 +1676,7 @@ var PreachView = class extends import_obsidian2.ItemView {
       ws.leftSplit.collapse();
     if (this.rightSplitWasOpen)
       ws.rightSplit.collapse();
-    this.renderComponent = new import_obsidian2.Component();
+    this.renderComponent = new import_obsidian3.Component();
     this.renderComponent.load();
     this.highlightManager = new HighlightManager(
       this.app,
@@ -1478,6 +1710,13 @@ var PreachView = class extends import_obsidian2.ItemView {
       this.app.vault.on("modify", (modified) => {
         if (this.file && modified.path === this.file.path) {
           void this.renderFile(this.file);
+        }
+      })
+    );
+    this.registerEvent(
+      this.app.metadataCache.on("changed", (changed) => {
+        if (this.file && changed.path === this.file.path) {
+          this.timer.updateThresholds(this.timerThresholds());
         }
       })
     );
@@ -1524,6 +1763,8 @@ var PreachView = class extends import_obsidian2.ItemView {
   }
   async setFile(file) {
     this.file = file;
+    if (this.timer)
+      this.timer.updateThresholds(this.timerThresholds());
     if (this.highlightManager) {
       this.highlightManager.updateFile(file);
     }
@@ -1533,6 +1774,16 @@ var PreachView = class extends import_obsidian2.ItemView {
     if (this.scrollEl) {
       await this.renderFile(file);
     }
+  }
+  timerThresholds() {
+    var _a;
+    const { targetMinutes, warnMinutes, critMinutes } = this.plugin.settings;
+    const frontmatter = this.file ? (_a = this.app.metadataCache.getFileCache(this.file)) == null ? void 0 : _a.frontmatter : void 0;
+    return {
+      targetMinutes: noteTargetMinutes(frontmatter, targetMinutes),
+      warnMinutes,
+      critMinutes
+    };
   }
   // Build the full preach UI into containerEl
   buildUI() {
@@ -1545,11 +1796,7 @@ var PreachView = class extends import_obsidian2.ItemView {
       this.resetIdleTimer();
     });
     this.timerEl = root.createDiv({ cls: "preach-timer-corner" });
-    this.timer = new PreachTimer(this.timerEl, {
-      targetMinutes: this.plugin.settings.targetMinutes,
-      warnMinutes: this.plugin.settings.warnMinutes,
-      critMinutes: this.plugin.settings.critMinutes
-    });
+    this.timer = new PreachTimer(this.timerEl, this.timerThresholds());
     this.bottomBtns = root.createDiv({ cls: "preach-bottom-btns" });
     this.outlineBtn = this.bottomBtns.createEl("button", {
       cls: "preach-corner-btn preach-corner-btn--outline",
@@ -1650,7 +1897,7 @@ var PreachView = class extends import_obsidian2.ItemView {
           "data-highlightable": block.highlightable ? "true" : "false"
         }
       });
-      await import_obsidian2.MarkdownRenderer.render(
+      await import_obsidian3.MarkdownRenderer.render(
         this.app,
         block.content,
         wrapper,
@@ -1945,228 +2192,6 @@ var PreachView = class extends import_obsidian2.ItemView {
       });
       this.touchHandler = null;
     }
-  }
-};
-
-// src/settings.ts
-var import_obsidian3 = require("obsidian");
-var DEFAULT_SETTINGS = {
-  targetMinutes: 30,
-  warnMinutes: 5,
-  critMinutes: 1,
-  sectionHeadingLevel: 2,
-  csbFolderPath: "30_Knowledge/Theology/Bible/CSB"
-};
-function field(raw, key) {
-  return raw[key];
-}
-function boundedInt(value, min, max) {
-  if (typeof value !== "number" || !Number.isInteger(value))
-    return void 0;
-  return value >= min && value <= max ? value : void 0;
-}
-function parseStoredSettings(raw) {
-  if (typeof raw !== "object" || raw === null)
-    return {};
-  const out = {};
-  const targetMinutes = boundedInt(field(raw, "targetMinutes"), 1, 24 * 60);
-  if (targetMinutes !== void 0)
-    out.targetMinutes = targetMinutes;
-  const warnMinutes = boundedInt(field(raw, "warnMinutes"), 1, 24 * 60);
-  if (warnMinutes !== void 0)
-    out.warnMinutes = warnMinutes;
-  const critMinutes = boundedInt(field(raw, "critMinutes"), 1, 24 * 60);
-  if (critMinutes !== void 0)
-    out.critMinutes = critMinutes;
-  const sectionHeadingLevel = boundedInt(field(raw, "sectionHeadingLevel"), 1, 6);
-  if (sectionHeadingLevel !== void 0)
-    out.sectionHeadingLevel = sectionHeadingLevel;
-  const csbFolderPath = field(raw, "csbFolderPath");
-  if (typeof csbFolderPath === "string")
-    out.csbFolderPath = csbFolderPath.trim();
-  return out;
-}
-var PreachMDSettingTab = class extends import_obsidian3.PluginSettingTab {
-  constructor(app, plugin) {
-    super(app, plugin);
-    this.plugin = plugin;
-  }
-  /**
-   * Declarative mirror of display(), so these settings are reachable from
-   * Obsidian's settings search on 1.13 and later.
-   *
-   * Added alongside display() rather than replacing it. Older Obsidian never
-   * calls this method, so minAppVersion stays at 1.4.0 and nobody is dropped
-   * for the sake of search.
-   */
-  getSettingDefinitions() {
-    return [
-      {
-        type: "group",
-        heading: "Timer",
-        items: [
-          {
-            name: "Target duration (minutes)",
-            desc: "The countdown starts from this value.",
-            aliases: ["countdown", "length", "sermon length"],
-            control: {
-              type: "number",
-              key: "targetMinutes",
-              defaultValue: DEFAULT_SETTINGS.targetMinutes,
-              placeholder: String(DEFAULT_SETTINGS.targetMinutes),
-              min: 1
-            }
-          },
-          {
-            name: "Amber warning (minutes remaining)",
-            desc: "Timer turns amber when this many minutes remain.",
-            aliases: ["warning", "orange"],
-            control: {
-              type: "number",
-              key: "warnMinutes",
-              defaultValue: DEFAULT_SETTINGS.warnMinutes,
-              placeholder: String(DEFAULT_SETTINGS.warnMinutes),
-              min: 1
-            }
-          },
-          {
-            name: "Red warning (minutes remaining)",
-            desc: "Timer turns red when this many minutes remain.",
-            aliases: ["warning", "critical"],
-            control: {
-              type: "number",
-              key: "critMinutes",
-              defaultValue: DEFAULT_SETTINGS.critMinutes,
-              placeholder: String(DEFAULT_SETTINGS.critMinutes),
-              min: 1
-            }
-          }
-        ]
-      },
-      {
-        type: "group",
-        heading: "Navigation",
-        items: [
-          {
-            name: "Section heading level",
-            desc: "Heading level used to build the outline (2 = ##, 3 = ###).",
-            aliases: ["outline", "sections"],
-            control: {
-              type: "number",
-              key: "sectionHeadingLevel",
-              defaultValue: DEFAULT_SETTINGS.sectionHeadingLevel,
-              placeholder: String(DEFAULT_SETTINGS.sectionHeadingLevel),
-              min: 1,
-              max: 6
-            }
-          }
-        ]
-      },
-      {
-        type: "group",
-        heading: "Scripture",
-        items: [
-          {
-            name: "Bible folder path",
-            desc: 'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file.',
-            aliases: ["bible", "csb", "scripture", "verses"],
-            control: {
-              type: "text",
-              key: "csbFolderPath",
-              defaultValue: DEFAULT_SETTINGS.csbFolderPath,
-              placeholder: DEFAULT_SETTINGS.csbFolderPath
-            }
-          }
-        ]
-      }
-    ];
-  }
-  /**
-   * Applies the same validation the imperative controls in display() apply,
-   * so a value typed into settings search cannot land somewhere the
-   * hand-built inputs would have rejected. An out-of-range value is ignored
-   * rather than clamped, matching display()'s behaviour of simply not
-   * assigning.
-   */
-  setControlValue(key, value) {
-    const settings = this.plugin.settings;
-    switch (key) {
-      case "targetMinutes":
-      case "warnMinutes":
-      case "critMinutes": {
-        const n = Number(value);
-        if (!Number.isFinite(n) || n <= 0)
-          return;
-        settings[key] = n;
-        break;
-      }
-      case "sectionHeadingLevel": {
-        const n = Number(value);
-        if (!Number.isFinite(n) || n < 1 || n > 6)
-          return;
-        settings.sectionHeadingLevel = n;
-        break;
-      }
-      case "csbFolderPath":
-        settings.csbFolderPath = String(value).trim();
-        break;
-      default:
-        return;
-    }
-    return this.plugin.saveSettings();
-  }
-  display() {
-    const { containerEl } = this;
-    containerEl.empty();
-    new import_obsidian3.Setting(containerEl).setName("Timer").setHeading();
-    new import_obsidian3.Setting(containerEl).setName("Target duration (minutes)").setDesc("The countdown starts from this value.").addText(
-      (text) => text.setPlaceholder("30").setValue(String(this.plugin.settings.targetMinutes)).onChange((value) => {
-        const n = parseInt(value, 10);
-        if (!isNaN(n) && n > 0) {
-          this.plugin.settings.targetMinutes = n;
-          void this.plugin.saveSettings();
-        }
-      })
-    );
-    new import_obsidian3.Setting(containerEl).setName("Amber warning (minutes remaining)").setDesc("Timer turns amber when this many minutes remain.").addText(
-      (text) => text.setPlaceholder("5").setValue(String(this.plugin.settings.warnMinutes)).onChange((value) => {
-        const n = parseInt(value, 10);
-        if (!isNaN(n) && n > 0) {
-          this.plugin.settings.warnMinutes = n;
-          void this.plugin.saveSettings();
-        }
-      })
-    );
-    new import_obsidian3.Setting(containerEl).setName("Red warning (minutes remaining)").setDesc("Timer turns red when this many minutes remain.").addText(
-      (text) => text.setPlaceholder("1").setValue(String(this.plugin.settings.critMinutes)).onChange((value) => {
-        const n = parseInt(value, 10);
-        if (!isNaN(n) && n > 0) {
-          this.plugin.settings.critMinutes = n;
-          void this.plugin.saveSettings();
-        }
-      })
-    );
-    new import_obsidian3.Setting(containerEl).setName("Navigation").setHeading();
-    new import_obsidian3.Setting(containerEl).setName("Section heading level").setDesc(
-      "Heading level used to build the outline (2 = ##, 3 = ###)."
-    ).addText(
-      (text) => text.setPlaceholder("2").setValue(String(this.plugin.settings.sectionHeadingLevel)).onChange((value) => {
-        const n = parseInt(value, 10);
-        if (!isNaN(n) && n >= 1 && n <= 6) {
-          this.plugin.settings.sectionHeadingLevel = n;
-          void this.plugin.saveSettings();
-        }
-      })
-    );
-    new import_obsidian3.Setting(containerEl).setName("Scripture").setHeading();
-    new import_obsidian3.Setting(containerEl).setName("Bible folder path").setDesc(
-      'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file.'
-    ).addText(
-      (text) => text.setPlaceholder("30_Knowledge/Theology/Bible/CSB").setValue(this.plugin.settings.csbFolderPath).onChange((value) => {
-        this.plugin.settings.csbFolderPath = value.trim();
-        void this.plugin.saveSettings();
-      })
-    );
   }
 };
 
