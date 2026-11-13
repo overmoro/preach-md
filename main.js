@@ -30,455 +30,8 @@ __export(main_exports, {
 module.exports = __toCommonJS(main_exports);
 var import_obsidian5 = require("obsidian");
 
-// src/preach-view.ts
-var import_obsidian4 = require("obsidian");
-
-// src/settings.ts
-var import_obsidian = require("obsidian");
-var MIN_TEXT_SCALE = 70;
-var MAX_TEXT_SCALE = 200;
-var TEXT_SCALE_STEP = 10;
-var DEFAULT_SETTINGS = {
-  targetMinutes: 30,
-  warnMinutes: 5,
-  critMinutes: 1,
-  sectionHeadingLevel: 2,
-  csbFolderPath: "30_Knowledge/Theology/Bible/CSB",
-  textScalePercent: 100
-};
-function field(raw, key) {
-  return raw[key];
-}
-function boundedInt(value, min, max) {
-  if (typeof value !== "number" || !Number.isInteger(value))
-    return void 0;
-  return value >= min && value <= max ? value : void 0;
-}
-var MAX_MINUTES = 24 * 60;
-function noteTargetMinutes(frontmatter, fallback) {
-  var _a;
-  if (typeof frontmatter !== "object" || frontmatter === null)
-    return fallback;
-  let value = field(frontmatter, "preach-minutes");
-  if (typeof value === "string" && value.trim() !== "")
-    value = Number(value);
-  return (_a = boundedInt(value, 1, MAX_MINUTES)) != null ? _a : fallback;
-}
-function parseStoredSettings(raw) {
-  if (typeof raw !== "object" || raw === null)
-    return {};
-  const out = {};
-  const targetMinutes = boundedInt(field(raw, "targetMinutes"), 1, MAX_MINUTES);
-  if (targetMinutes !== void 0)
-    out.targetMinutes = targetMinutes;
-  const warnMinutes = boundedInt(field(raw, "warnMinutes"), 1, MAX_MINUTES);
-  if (warnMinutes !== void 0)
-    out.warnMinutes = warnMinutes;
-  const critMinutes = boundedInt(field(raw, "critMinutes"), 1, MAX_MINUTES);
-  if (critMinutes !== void 0)
-    out.critMinutes = critMinutes;
-  const sectionHeadingLevel = boundedInt(field(raw, "sectionHeadingLevel"), 1, 6);
-  if (sectionHeadingLevel !== void 0)
-    out.sectionHeadingLevel = sectionHeadingLevel;
-  const csbFolderPath = field(raw, "csbFolderPath");
-  if (typeof csbFolderPath === "string")
-    out.csbFolderPath = csbFolderPath.trim();
-  const textScalePercent = boundedInt(field(raw, "textScalePercent"), MIN_TEXT_SCALE, MAX_TEXT_SCALE);
-  if (textScalePercent !== void 0)
-    out.textScalePercent = textScalePercent;
-  return out;
-}
-var PreachMDSettingTab = class extends import_obsidian.PluginSettingTab {
-  constructor(app, plugin) {
-    super(app, plugin);
-    this.plugin = plugin;
-  }
-  /**
-   * Declarative mirror of display(), so these settings are reachable from
-   * Obsidian's settings search on 1.13 and later.
-   *
-   * Added alongside display() rather than replacing it. Older Obsidian never
-   * calls this method, so minAppVersion stays at 1.4.0 and nobody is dropped
-   * for the sake of search.
-   */
-  getSettingDefinitions() {
-    return [
-      {
-        type: "group",
-        heading: "Timer",
-        items: [
-          {
-            name: "Target duration (minutes)",
-            desc: "The countdown starts from this value.",
-            aliases: ["countdown", "length", "sermon length"],
-            control: {
-              type: "number",
-              key: "targetMinutes",
-              defaultValue: DEFAULT_SETTINGS.targetMinutes,
-              placeholder: String(DEFAULT_SETTINGS.targetMinutes),
-              min: 1
-            }
-          },
-          {
-            name: "Amber warning (minutes remaining)",
-            desc: "Timer turns amber when this many minutes remain.",
-            aliases: ["warning", "orange"],
-            control: {
-              type: "number",
-              key: "warnMinutes",
-              defaultValue: DEFAULT_SETTINGS.warnMinutes,
-              placeholder: String(DEFAULT_SETTINGS.warnMinutes),
-              min: 1
-            }
-          },
-          {
-            name: "Red warning (minutes remaining)",
-            desc: "Timer turns red when this many minutes remain.",
-            aliases: ["warning", "critical"],
-            control: {
-              type: "number",
-              key: "critMinutes",
-              defaultValue: DEFAULT_SETTINGS.critMinutes,
-              placeholder: String(DEFAULT_SETTINGS.critMinutes),
-              min: 1
-            }
-          }
-        ]
-      },
-      {
-        type: "group",
-        heading: "Navigation",
-        items: [
-          {
-            name: "Section heading level",
-            desc: "Heading level used to build the outline (2 = ##, 3 = ###).",
-            aliases: ["outline", "sections"],
-            control: {
-              type: "number",
-              key: "sectionHeadingLevel",
-              defaultValue: DEFAULT_SETTINGS.sectionHeadingLevel,
-              placeholder: String(DEFAULT_SETTINGS.sectionHeadingLevel),
-              min: 1,
-              max: 6
-            }
-          }
-        ]
-      },
-      {
-        type: "group",
-        heading: "Display",
-        items: [
-          {
-            name: "Text size (%)",
-            desc: "Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.",
-            aliases: ["font", "zoom", "bigger", "larger"],
-            control: {
-              type: "number",
-              key: "textScalePercent",
-              defaultValue: DEFAULT_SETTINGS.textScalePercent,
-              placeholder: String(DEFAULT_SETTINGS.textScalePercent),
-              min: MIN_TEXT_SCALE,
-              max: MAX_TEXT_SCALE
-            }
-          }
-        ]
-      },
-      {
-        type: "group",
-        heading: "Scripture",
-        items: [
-          {
-            name: "Bible folder path",
-            desc: 'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file.',
-            aliases: ["bible", "csb", "scripture", "verses"],
-            control: {
-              type: "text",
-              key: "csbFolderPath",
-              defaultValue: DEFAULT_SETTINGS.csbFolderPath,
-              placeholder: DEFAULT_SETTINGS.csbFolderPath
-            }
-          }
-        ]
-      }
-    ];
-  }
-  /**
-   * Applies the same validation the imperative controls in display() apply,
-   * so a value typed into settings search cannot land somewhere the
-   * hand-built inputs would have rejected. An out-of-range value is ignored
-   * rather than clamped, matching display()'s behaviour of simply not
-   * assigning.
-   */
-  setControlValue(key, value) {
-    const settings = this.plugin.settings;
-    switch (key) {
-      case "targetMinutes":
-      case "warnMinutes":
-      case "critMinutes": {
-        const n = Number(value);
-        if (!Number.isFinite(n) || n <= 0)
-          return;
-        settings[key] = n;
-        break;
-      }
-      case "sectionHeadingLevel": {
-        const n = Number(value);
-        if (!Number.isFinite(n) || n < 1 || n > 6)
-          return;
-        settings.sectionHeadingLevel = n;
-        break;
-      }
-      case "textScalePercent": {
-        const n = Number(value);
-        if (!Number.isInteger(n) || n < MIN_TEXT_SCALE || n > MAX_TEXT_SCALE)
-          return;
-        settings.textScalePercent = n;
-        break;
-      }
-      case "csbFolderPath":
-        settings.csbFolderPath = String(value).trim();
-        break;
-      default:
-        return;
-    }
-    return this.plugin.saveSettings();
-  }
-  display() {
-    const { containerEl } = this;
-    containerEl.empty();
-    new import_obsidian.Setting(containerEl).setName("Timer").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Target duration (minutes)").setDesc("The countdown starts from this value.").addText(
-      (text) => text.setPlaceholder("30").setValue(String(this.plugin.settings.targetMinutes)).onChange((value) => {
-        const n = parseInt(value, 10);
-        if (!isNaN(n) && n > 0) {
-          this.plugin.settings.targetMinutes = n;
-          void this.plugin.saveSettings();
-        }
-      })
-    );
-    new import_obsidian.Setting(containerEl).setName("Amber warning (minutes remaining)").setDesc("Timer turns amber when this many minutes remain.").addText(
-      (text) => text.setPlaceholder("5").setValue(String(this.plugin.settings.warnMinutes)).onChange((value) => {
-        const n = parseInt(value, 10);
-        if (!isNaN(n) && n > 0) {
-          this.plugin.settings.warnMinutes = n;
-          void this.plugin.saveSettings();
-        }
-      })
-    );
-    new import_obsidian.Setting(containerEl).setName("Red warning (minutes remaining)").setDesc("Timer turns red when this many minutes remain.").addText(
-      (text) => text.setPlaceholder("1").setValue(String(this.plugin.settings.critMinutes)).onChange((value) => {
-        const n = parseInt(value, 10);
-        if (!isNaN(n) && n > 0) {
-          this.plugin.settings.critMinutes = n;
-          void this.plugin.saveSettings();
-        }
-      })
-    );
-    new import_obsidian.Setting(containerEl).setName("Navigation").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Section heading level").setDesc(
-      "Heading level used to build the outline (2 = ##, 3 = ###)."
-    ).addText(
-      (text) => text.setPlaceholder("2").setValue(String(this.plugin.settings.sectionHeadingLevel)).onChange((value) => {
-        const n = parseInt(value, 10);
-        if (!isNaN(n) && n >= 1 && n <= 6) {
-          this.plugin.settings.sectionHeadingLevel = n;
-          void this.plugin.saveSettings();
-        }
-      })
-    );
-    new import_obsidian.Setting(containerEl).setName("Display").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Text size (%)").setDesc("Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.").addText(
-      (text) => text.setPlaceholder("100").setValue(String(this.plugin.settings.textScalePercent)).onChange((value) => {
-        void this.setControlValue("textScalePercent", value);
-      })
-    );
-    new import_obsidian.Setting(containerEl).setName("Scripture").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Bible folder path").setDesc(
-      'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file.'
-    ).addText(
-      (text) => text.setPlaceholder("30_Knowledge/Theology/Bible/CSB").setValue(this.plugin.settings.csbFolderPath).onChange((value) => {
-        this.plugin.settings.csbFolderPath = value.trim();
-        void this.plugin.saveSettings();
-      })
-    );
-  }
-};
-
-// src/timer.ts
-var PreachTimer = class {
-  constructor(container, thresholds) {
-    // Three-state machine
-    this.runState = "idle";
-    // Timestamp when the current running segment began
-    this.segmentStart = null;
-    this.intervalId = null;
-    // Double-tap detection
-    this.lastTapTime = 0;
-    this.singleTapTimeout = null;
-    this.thresholds = thresholds;
-    this.remainingAtPause = thresholds.targetMinutes * 60;
-    this.el = container.createDiv({ cls: "preach-timer" });
-    this.el.setAttribute("role", "timer");
-    this.el.setAttribute("aria-live", "off");
-    this.el.dataset.runState = "idle";
-    this.labelEl = container.createDiv({ cls: "preach-timer-label" });
-    this.labelEl.textContent = "Start";
-    this.el.addEventListener("pointerdown", (e) => {
-      e.stopPropagation();
-      this.handleTap();
-    });
-    this.renderDisplay();
-  }
-  // Called from preach-view after open - starts tick loop so display is live
-  start() {
-    this.renderDisplay();
-  }
-  stop() {
-    this.clearInterval();
-    if (this.singleTapTimeout !== null) {
-      window.clearTimeout(this.singleTapTimeout);
-      this.singleTapTimeout = null;
-    }
-  }
-  updateThresholds(thresholds) {
-    this.thresholds = thresholds;
-    if (this.runState === "idle") {
-      this.remainingAtPause = thresholds.targetMinutes * 60;
-    }
-    this.renderDisplay();
-  }
-  // Single tap: toggle running/paused (or start if idle)
-  // Double tap (within 300ms): reset to idle
-  handleTap() {
-    const now = Date.now();
-    const timeSinceLast = now - this.lastTapTime;
-    this.lastTapTime = now;
-    if (timeSinceLast < 300) {
-      if (this.singleTapTimeout !== null) {
-        window.clearTimeout(this.singleTapTimeout);
-        this.singleTapTimeout = null;
-      }
-      this.transitionToIdle();
-      return;
-    }
-    this.singleTapTimeout = window.setTimeout(() => {
-      this.singleTapTimeout = null;
-      this.handleSingleTap();
-    }, 300);
-  }
-  handleSingleTap() {
-    if (this.runState === "idle" || this.runState === "paused") {
-      this.transitionToRunning();
-    } else {
-      this.transitionToPaused();
-    }
-  }
-  transitionToRunning() {
-    this.segmentStart = Date.now();
-    this.runState = "running";
-    this.el.dataset.runState = "running";
-    this.intervalId = window.setInterval(() => this.tick(), 250);
-    this.tick();
-  }
-  transitionToPaused() {
-    this.remainingAtPause = this.computeRemaining();
-    this.clearInterval();
-    this.segmentStart = null;
-    this.runState = "paused";
-    this.el.dataset.runState = "paused";
-    this.renderDisplay();
-  }
-  transitionToIdle() {
-    this.clearInterval();
-    this.segmentStart = null;
-    this.runState = "idle";
-    this.el.dataset.runState = "idle";
-    this.remainingAtPause = this.thresholds.targetMinutes * 60;
-    this.renderDisplay();
-  }
-  clearInterval() {
-    if (this.intervalId !== null) {
-      window.clearInterval(this.intervalId);
-      this.intervalId = null;
-    }
-  }
-  computeRemaining() {
-    if (this.segmentStart === null)
-      return this.remainingAtPause;
-    const elapsed = (Date.now() - this.segmentStart) / 1e3;
-    return this.remainingAtPause - elapsed;
-  }
-  tick() {
-    this.renderDisplay();
-  }
-  renderDisplay() {
-    const remaining = this.runState === "running" ? this.computeRemaining() : this.remainingAtPause;
-    const isOvertime = remaining < 0;
-    const absSecs = Math.abs(Math.ceil(remaining));
-    const mins = Math.floor(absSecs / 60);
-    const secs = absSecs % 60;
-    const timeStr = `${mins}:${secs.toString().padStart(2, "0")}`;
-    const display = isOvertime ? `+${timeStr}` : timeStr;
-    this.el.textContent = display;
-    const remainingMins = remaining / 60;
-    let colourState;
-    if (isOvertime) {
-      colourState = "overtime";
-    } else if (remainingMins <= this.thresholds.critMinutes) {
-      colourState = "crit";
-    } else if (remainingMins <= this.thresholds.warnMinutes) {
-      colourState = "warn";
-    } else {
-      colourState = "normal";
-    }
-    this.el.dataset.state = colourState;
-    if (this.runState === "idle") {
-      this.labelEl.textContent = "Start";
-    } else if (this.runState === "running") {
-      this.labelEl.textContent = "Pause";
-    } else {
-      this.labelEl.textContent = "Resume | reset";
-    }
-  }
-};
-
-// src/blocks.ts
-var isEmpty = (s) => s.position.start.offset === s.position.end.offset;
-function sectionsFit(text, sections) {
-  const lineStart = [0];
-  for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) {
-    lineStart.push(i + 1);
-  }
-  const locFits = (loc) => {
-    const base = lineStart[loc.line];
-    if (base === void 0 || base + loc.col !== loc.offset)
-      return false;
-    const lineEnd = loc.line + 1 < lineStart.length ? lineStart[loc.line + 1] - 1 : text.length;
-    return loc.offset <= lineEnd;
-  };
-  let cursor = 0;
-  for (const s of sections) {
-    if (isEmpty(s))
-      continue;
-    const { start, end } = s.position;
-    if (!locFits(start) || !locFits(end))
-      return false;
-    if (text.slice(cursor, start.offset).trim() !== "")
-      return false;
-    cursor = end.offset;
-  }
-  return text.slice(cursor).trim() === "";
-}
-function toBlocks(_text, sections) {
-  return sections.filter((s) => !isEmpty(s) && s.type !== "yaml" && s.type !== "comment").map((s) => ({
-    start: s.position.start.offset,
-    end: s.position.end.offset,
-    line: s.position.start.line
-  }));
-}
-
 // src/scripture.ts
-var import_obsidian2 = require("obsidian");
+var import_obsidian = require("obsidian");
 var BOOK_MAP = {
   // Genesis
   genesis: "Genesis",
@@ -1083,13 +636,13 @@ function parseChapterFile(content) {
   flush();
   return map;
 }
-async function loadChapter(app, csbFolder, book, chapter) {
+async function loadVaultChapter(app, csbFolder, book, chapter) {
   for (const path of chapterPaths(csbFolder, book, chapter)) {
     if (verseCache.has(path)) {
       return verseCache.get(path);
     }
     const file = app.vault.getAbstractFileByPath(path);
-    if (!file || !(file instanceof import_obsidian2.TFile))
+    if (!file || !(file instanceof import_obsidian.TFile))
       continue;
     const content = await app.vault.read(file);
     const map = parseChapterFile(content);
@@ -1098,29 +651,108 @@ async function loadChapter(app, csbFolder, book, chapter) {
   }
   return null;
 }
-async function fetchVerses(app, csbFolder, ref) {
-  const notFound = () => new Error(`Passage not found: ${ref.raw}`);
-  if (ref.chapterEnd < ref.chapter)
-    throw notFound();
+var BSB_URL = "https://bereanbible.com/bsb.txt";
+var BSB_SIZE = "4.3 MB";
+var BSB_CHAPTERS = 1189;
+var BSB_VERSES = 31102;
+var MARKUP = /[[\]<>*_`#|\\~$^={}/&%@+]|www\./i;
+var BLOCK_START = /^\s*(?:-|\d+[.)](?:\s|$))/;
+var bibleFile = null;
+var bible = null;
+function setBibleFile(path) {
+  bibleFile = path;
+  bible = null;
+}
+function parseBibleText(text) {
+  const chapters = /* @__PURE__ */ new Map();
+  let verses = 0;
+  for (const line of text.split(/\r?\n/)) {
+    const m = /^(.+) (\d+):(\d+)\t(.*)$/.exec(line);
+    if (!m)
+      continue;
+    const book = normaliseBook(m[1]);
+    if (book === null || MARKUP.test(m[4]) || BLOCK_START.test(m[4]))
+      return null;
+    const key = `${book} ${parseInt(m[2], 10)}`;
+    const verse = parseInt(m[3], 10);
+    let chapter = chapters.get(key);
+    if (!chapter)
+      chapters.set(key, chapter = /* @__PURE__ */ new Map());
+    if (!chapter.has(verse))
+      verses++;
+    chapter.set(verse, m[4].trim());
+  }
+  return text.endsWith("\n") && chapters.size === BSB_CHAPTERS && verses === BSB_VERSES ? chapters : null;
+}
+function loadDownloadedBible(app) {
+  if (bibleFile === null)
+    return Promise.resolve(null);
+  bible != null ? bible : bible = app.vault.adapter.read(bibleFile).then(parseBibleText, () => bible = null);
+  return bible;
+}
+async function bibleStatus(app) {
+  if (bibleFile === null || !await app.vault.adapter.exists(bibleFile))
+    return "absent";
+  return await loadDownloadedBible(app) ? "ready" : "damaged";
+}
+async function downloadBible(app) {
+  const file = bibleFile;
+  if (file === null)
+    throw new Error("the plugin folder isn't known yet");
+  const { text } = await (0, import_obsidian.requestUrl)({ url: BSB_URL });
+  if (parseBibleText(text) === null) {
+    throw new Error("the download was incomplete or wasn't the expected Bible text. Nothing was saved.");
+  }
+  const adapter = app.vault.adapter;
+  const part = `${file}.part`;
+  await adapter.write(part, text);
+  if (await adapter.exists(file))
+    await adapter.remove(file);
+  await adapter.rename(part, file);
+  setBibleFile(file);
+}
+async function removeBible(app) {
+  const file = bibleFile;
+  if (file === null)
+    return;
+  const adapter = app.vault.adapter;
+  for (const path of [file, `${file}.part`]) {
+    if (await adapter.exists(path))
+      await adapter.remove(path);
+  }
+  setBibleFile(file);
+}
+async function readRange(ref, load) {
   const results = [];
   for (let c = ref.chapter; c <= ref.chapterEnd; c++) {
-    const map = await loadChapter(app, csbFolder, ref.book, c);
+    const map = await load(c);
     if (!map)
-      throw notFound();
+      return null;
     const max = Math.max(...map.keys());
     const first = c === ref.chapter ? ref.verseStart : 1;
     const last = c === ref.chapterEnd && ref.verseEnd !== Infinity ? ref.verseEnd : max;
     if (first < 1 || last < first || last > max)
-      throw notFound();
+      return null;
     for (let v = first; v <= last; v++) {
       const text = map.get(v);
       if (text)
         results.push({ chapter: c, verse: v, text });
     }
   }
-  if (results.length === 0)
+  return results.length > 0 ? results : null;
+}
+async function fetchVerses(app, csbFolder, ref) {
+  var _a;
+  const notFound = () => new Error(`Passage not found: ${ref.raw}`);
+  if (ref.chapterEnd < ref.chapter)
     throw notFound();
-  return results;
+  const rows = (_a = await readRange(ref, (c) => loadVaultChapter(app, csbFolder, ref.book, c))) != null ? _a : await readRange(ref, async (c) => {
+    var _a2, _b;
+    return (_b = (_a2 = await loadDownloadedBible(app)) == null ? void 0 : _a2.get(`${ref.book} ${c}`)) != null ? _b : null;
+  });
+  if (!rows)
+    throw notFound();
+  return rows;
 }
 var ScriptureExpander = class {
   constructor(app, csbFolder, component, sourcePath) {
@@ -1252,7 +884,7 @@ var ScriptureExpander = class {
       prevChapter = chapter;
       passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: label });
       const tmp = createDiv();
-      await import_obsidian2.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
+      await import_obsidian.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
       const nodes = Array.from(tmp.childNodes);
       for (const node of nodes) {
         if (node.instanceOf(HTMLElement) && node.tagName === "P") {
@@ -1283,6 +915,509 @@ var ScriptureExpander = class {
     this.expanded.clear();
   }
 };
+
+// src/preach-view.ts
+var import_obsidian4 = require("obsidian");
+
+// src/settings.ts
+var import_obsidian2 = require("obsidian");
+var MIN_TEXT_SCALE = 70;
+var MAX_TEXT_SCALE = 200;
+var TEXT_SCALE_STEP = 10;
+var DEFAULT_SETTINGS = {
+  targetMinutes: 30,
+  warnMinutes: 5,
+  critMinutes: 1,
+  sectionHeadingLevel: 2,
+  csbFolderPath: "30_Knowledge/Theology/Bible/CSB",
+  textScalePercent: 100
+};
+function field(raw, key) {
+  return raw[key];
+}
+function boundedInt(value, min, max) {
+  if (typeof value !== "number" || !Number.isInteger(value))
+    return void 0;
+  return value >= min && value <= max ? value : void 0;
+}
+var MAX_MINUTES = 24 * 60;
+function noteTargetMinutes(frontmatter, fallback) {
+  var _a;
+  if (typeof frontmatter !== "object" || frontmatter === null)
+    return fallback;
+  let value = field(frontmatter, "preach-minutes");
+  if (typeof value === "string" && value.trim() !== "")
+    value = Number(value);
+  return (_a = boundedInt(value, 1, MAX_MINUTES)) != null ? _a : fallback;
+}
+function parseStoredSettings(raw) {
+  if (typeof raw !== "object" || raw === null)
+    return {};
+  const out = {};
+  const targetMinutes = boundedInt(field(raw, "targetMinutes"), 1, MAX_MINUTES);
+  if (targetMinutes !== void 0)
+    out.targetMinutes = targetMinutes;
+  const warnMinutes = boundedInt(field(raw, "warnMinutes"), 1, MAX_MINUTES);
+  if (warnMinutes !== void 0)
+    out.warnMinutes = warnMinutes;
+  const critMinutes = boundedInt(field(raw, "critMinutes"), 1, MAX_MINUTES);
+  if (critMinutes !== void 0)
+    out.critMinutes = critMinutes;
+  const sectionHeadingLevel = boundedInt(field(raw, "sectionHeadingLevel"), 1, 6);
+  if (sectionHeadingLevel !== void 0)
+    out.sectionHeadingLevel = sectionHeadingLevel;
+  const csbFolderPath = field(raw, "csbFolderPath");
+  if (typeof csbFolderPath === "string")
+    out.csbFolderPath = csbFolderPath.trim();
+  const textScalePercent = boundedInt(field(raw, "textScalePercent"), MIN_TEXT_SCALE, MAX_TEXT_SCALE);
+  if (textScalePercent !== void 0)
+    out.textScalePercent = textScalePercent;
+  return out;
+}
+var OFFLINE_BIBLE_DESC = `Download the Berean Standard Bible (public domain, ${BSB_SIZE}) once from ${new URL(BSB_URL).host}. After that, references your Bible folder can't supply expand offline.`;
+var PreachMDSettingTab = class extends import_obsidian2.PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.downloading = false;
+    this.repaintBible = null;
+    this.plugin = plugin;
+  }
+  /**
+   * Declarative mirror of display(), so these settings are reachable from
+   * Obsidian's settings search on 1.13 and later.
+   *
+   * Added alongside display() rather than replacing it. Older Obsidian never
+   * calls this method, so minAppVersion stays at 1.4.0 and nobody is dropped
+   * for the sake of search.
+   */
+  getSettingDefinitions() {
+    return [
+      {
+        type: "group",
+        heading: "Timer",
+        items: [
+          {
+            name: "Target duration (minutes)",
+            desc: "The countdown starts from this value.",
+            aliases: ["countdown", "length", "sermon length"],
+            control: {
+              type: "number",
+              key: "targetMinutes",
+              defaultValue: DEFAULT_SETTINGS.targetMinutes,
+              placeholder: String(DEFAULT_SETTINGS.targetMinutes),
+              min: 1
+            }
+          },
+          {
+            name: "Amber warning (minutes remaining)",
+            desc: "Timer turns amber when this many minutes remain.",
+            aliases: ["warning", "orange"],
+            control: {
+              type: "number",
+              key: "warnMinutes",
+              defaultValue: DEFAULT_SETTINGS.warnMinutes,
+              placeholder: String(DEFAULT_SETTINGS.warnMinutes),
+              min: 1
+            }
+          },
+          {
+            name: "Red warning (minutes remaining)",
+            desc: "Timer turns red when this many minutes remain.",
+            aliases: ["warning", "critical"],
+            control: {
+              type: "number",
+              key: "critMinutes",
+              defaultValue: DEFAULT_SETTINGS.critMinutes,
+              placeholder: String(DEFAULT_SETTINGS.critMinutes),
+              min: 1
+            }
+          }
+        ]
+      },
+      {
+        type: "group",
+        heading: "Navigation",
+        items: [
+          {
+            name: "Section heading level",
+            desc: "Heading level used to build the outline (2 = ##, 3 = ###).",
+            aliases: ["outline", "sections"],
+            control: {
+              type: "number",
+              key: "sectionHeadingLevel",
+              defaultValue: DEFAULT_SETTINGS.sectionHeadingLevel,
+              placeholder: String(DEFAULT_SETTINGS.sectionHeadingLevel),
+              min: 1,
+              max: 6
+            }
+          }
+        ]
+      },
+      {
+        type: "group",
+        heading: "Display",
+        items: [
+          {
+            name: "Text size (%)",
+            desc: "Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.",
+            aliases: ["font", "zoom", "bigger", "larger"],
+            control: {
+              type: "number",
+              key: "textScalePercent",
+              defaultValue: DEFAULT_SETTINGS.textScalePercent,
+              placeholder: String(DEFAULT_SETTINGS.textScalePercent),
+              min: MIN_TEXT_SCALE,
+              max: MAX_TEXT_SCALE
+            }
+          }
+        ]
+      },
+      {
+        type: "group",
+        heading: "Scripture",
+        items: [
+          {
+            name: "Bible folder path",
+            desc: 'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file. Checked before the offline Bible.',
+            aliases: ["bible", "csb", "scripture", "verses"],
+            control: {
+              type: "text",
+              key: "csbFolderPath",
+              defaultValue: DEFAULT_SETTINGS.csbFolderPath,
+              placeholder: DEFAULT_SETTINGS.csbFolderPath
+            }
+          },
+          {
+            name: "Offline Bible",
+            desc: OFFLINE_BIBLE_DESC,
+            aliases: ["bsb", "berean", "download", "offline"],
+            render: (setting) => this.renderOfflineBible(setting)
+          }
+        ]
+      }
+    ];
+  }
+  renderOfflineBible(setting) {
+    setting.setName("Offline Bible");
+    const paint = async () => {
+      const status = this.downloading ? "downloading" : await bibleStatus(this.app);
+      setting.controlEl.empty();
+      if (status === "downloading") {
+        setting.setDesc(`Downloading the Berean Standard Bible (${BSB_SIZE})...`);
+        setting.addButton((b) => b.setButtonText("Downloading...").setDisabled(true));
+      } else if (status === "ready") {
+        setting.setDesc(
+          "Berean Standard Bible (public domain) is on this device. Used for any passage your Bible folder can't supply."
+        );
+        setting.addButton(
+          (b) => b.setButtonText("Remove").onClick(() => {
+            void removeBible(this.app).then(paint);
+          })
+        );
+      } else {
+        setting.setDesc(
+          status === "damaged" ? "The downloaded Bible is incomplete or damaged, so it isn't being used. Download it again." : OFFLINE_BIBLE_DESC
+        );
+        setting.addButton(
+          (b) => b.setButtonText(status === "damaged" ? "Download again" : "Download").onClick(() => {
+            if (this.downloading)
+              return;
+            this.downloading = true;
+            void paint();
+            void (async () => {
+              var _a;
+              try {
+                await downloadBible(this.app);
+                new import_obsidian2.Notice("Berean Standard Bible downloaded.");
+              } catch (e) {
+                new import_obsidian2.Notice(`Couldn't download the Bible: ${e instanceof Error ? e.message : String(e)}`);
+              } finally {
+                this.downloading = false;
+                (_a = this.repaintBible) == null ? void 0 : _a.call(this);
+              }
+            })();
+          })
+        );
+      }
+    };
+    this.repaintBible = () => void paint();
+    void paint();
+  }
+  /**
+   * Applies the same validation the imperative controls in display() apply,
+   * so a value typed into settings search cannot land somewhere the
+   * hand-built inputs would have rejected. An out-of-range value is ignored
+   * rather than clamped, matching display()'s behaviour of simply not
+   * assigning.
+   */
+  setControlValue(key, value) {
+    const settings = this.plugin.settings;
+    switch (key) {
+      case "targetMinutes":
+      case "warnMinutes":
+      case "critMinutes": {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n <= 0)
+          return;
+        settings[key] = n;
+        break;
+      }
+      case "sectionHeadingLevel": {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n < 1 || n > 6)
+          return;
+        settings.sectionHeadingLevel = n;
+        break;
+      }
+      case "textScalePercent": {
+        const n = Number(value);
+        if (!Number.isInteger(n) || n < MIN_TEXT_SCALE || n > MAX_TEXT_SCALE)
+          return;
+        settings.textScalePercent = n;
+        break;
+      }
+      case "csbFolderPath":
+        settings.csbFolderPath = String(value).trim();
+        break;
+      default:
+        return;
+    }
+    return this.plugin.saveSettings();
+  }
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    new import_obsidian2.Setting(containerEl).setName("Timer").setHeading();
+    new import_obsidian2.Setting(containerEl).setName("Target duration (minutes)").setDesc("The countdown starts from this value.").addText(
+      (text) => text.setPlaceholder("30").setValue(String(this.plugin.settings.targetMinutes)).onChange((value) => {
+        const n = parseInt(value, 10);
+        if (!isNaN(n) && n > 0) {
+          this.plugin.settings.targetMinutes = n;
+          void this.plugin.saveSettings();
+        }
+      })
+    );
+    new import_obsidian2.Setting(containerEl).setName("Amber warning (minutes remaining)").setDesc("Timer turns amber when this many minutes remain.").addText(
+      (text) => text.setPlaceholder("5").setValue(String(this.plugin.settings.warnMinutes)).onChange((value) => {
+        const n = parseInt(value, 10);
+        if (!isNaN(n) && n > 0) {
+          this.plugin.settings.warnMinutes = n;
+          void this.plugin.saveSettings();
+        }
+      })
+    );
+    new import_obsidian2.Setting(containerEl).setName("Red warning (minutes remaining)").setDesc("Timer turns red when this many minutes remain.").addText(
+      (text) => text.setPlaceholder("1").setValue(String(this.plugin.settings.critMinutes)).onChange((value) => {
+        const n = parseInt(value, 10);
+        if (!isNaN(n) && n > 0) {
+          this.plugin.settings.critMinutes = n;
+          void this.plugin.saveSettings();
+        }
+      })
+    );
+    new import_obsidian2.Setting(containerEl).setName("Navigation").setHeading();
+    new import_obsidian2.Setting(containerEl).setName("Section heading level").setDesc(
+      "Heading level used to build the outline (2 = ##, 3 = ###)."
+    ).addText(
+      (text) => text.setPlaceholder("2").setValue(String(this.plugin.settings.sectionHeadingLevel)).onChange((value) => {
+        const n = parseInt(value, 10);
+        if (!isNaN(n) && n >= 1 && n <= 6) {
+          this.plugin.settings.sectionHeadingLevel = n;
+          void this.plugin.saveSettings();
+        }
+      })
+    );
+    new import_obsidian2.Setting(containerEl).setName("Display").setHeading();
+    new import_obsidian2.Setting(containerEl).setName("Text size (%)").setDesc("Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.").addText(
+      (text) => text.setPlaceholder("100").setValue(String(this.plugin.settings.textScalePercent)).onChange((value) => {
+        void this.setControlValue("textScalePercent", value);
+      })
+    );
+    new import_obsidian2.Setting(containerEl).setName("Scripture").setHeading();
+    new import_obsidian2.Setting(containerEl).setName("Bible folder path").setDesc(
+      'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file. Checked before the offline Bible.'
+    ).addText(
+      (text) => text.setPlaceholder("30_Knowledge/Theology/Bible/CSB").setValue(this.plugin.settings.csbFolderPath).onChange((value) => {
+        this.plugin.settings.csbFolderPath = value.trim();
+        void this.plugin.saveSettings();
+      })
+    );
+    this.renderOfflineBible(new import_obsidian2.Setting(containerEl));
+  }
+};
+
+// src/timer.ts
+var PreachTimer = class {
+  constructor(container, thresholds) {
+    // Three-state machine
+    this.runState = "idle";
+    // Timestamp when the current running segment began
+    this.segmentStart = null;
+    this.intervalId = null;
+    // Double-tap detection
+    this.lastTapTime = 0;
+    this.singleTapTimeout = null;
+    this.thresholds = thresholds;
+    this.remainingAtPause = thresholds.targetMinutes * 60;
+    this.el = container.createDiv({ cls: "preach-timer" });
+    this.el.setAttribute("role", "timer");
+    this.el.setAttribute("aria-live", "off");
+    this.el.dataset.runState = "idle";
+    this.labelEl = container.createDiv({ cls: "preach-timer-label" });
+    this.labelEl.textContent = "Start";
+    this.el.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      this.handleTap();
+    });
+    this.renderDisplay();
+  }
+  // Called from preach-view after open - starts tick loop so display is live
+  start() {
+    this.renderDisplay();
+  }
+  stop() {
+    this.clearInterval();
+    if (this.singleTapTimeout !== null) {
+      window.clearTimeout(this.singleTapTimeout);
+      this.singleTapTimeout = null;
+    }
+  }
+  updateThresholds(thresholds) {
+    this.thresholds = thresholds;
+    if (this.runState === "idle") {
+      this.remainingAtPause = thresholds.targetMinutes * 60;
+    }
+    this.renderDisplay();
+  }
+  // Single tap: toggle running/paused (or start if idle)
+  // Double tap (within 300ms): reset to idle
+  handleTap() {
+    const now = Date.now();
+    const timeSinceLast = now - this.lastTapTime;
+    this.lastTapTime = now;
+    if (timeSinceLast < 300) {
+      if (this.singleTapTimeout !== null) {
+        window.clearTimeout(this.singleTapTimeout);
+        this.singleTapTimeout = null;
+      }
+      this.transitionToIdle();
+      return;
+    }
+    this.singleTapTimeout = window.setTimeout(() => {
+      this.singleTapTimeout = null;
+      this.handleSingleTap();
+    }, 300);
+  }
+  handleSingleTap() {
+    if (this.runState === "idle" || this.runState === "paused") {
+      this.transitionToRunning();
+    } else {
+      this.transitionToPaused();
+    }
+  }
+  transitionToRunning() {
+    this.segmentStart = Date.now();
+    this.runState = "running";
+    this.el.dataset.runState = "running";
+    this.intervalId = window.setInterval(() => this.tick(), 250);
+    this.tick();
+  }
+  transitionToPaused() {
+    this.remainingAtPause = this.computeRemaining();
+    this.clearInterval();
+    this.segmentStart = null;
+    this.runState = "paused";
+    this.el.dataset.runState = "paused";
+    this.renderDisplay();
+  }
+  transitionToIdle() {
+    this.clearInterval();
+    this.segmentStart = null;
+    this.runState = "idle";
+    this.el.dataset.runState = "idle";
+    this.remainingAtPause = this.thresholds.targetMinutes * 60;
+    this.renderDisplay();
+  }
+  clearInterval() {
+    if (this.intervalId !== null) {
+      window.clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+  computeRemaining() {
+    if (this.segmentStart === null)
+      return this.remainingAtPause;
+    const elapsed = (Date.now() - this.segmentStart) / 1e3;
+    return this.remainingAtPause - elapsed;
+  }
+  tick() {
+    this.renderDisplay();
+  }
+  renderDisplay() {
+    const remaining = this.runState === "running" ? this.computeRemaining() : this.remainingAtPause;
+    const isOvertime = remaining < 0;
+    const absSecs = Math.abs(Math.ceil(remaining));
+    const mins = Math.floor(absSecs / 60);
+    const secs = absSecs % 60;
+    const timeStr = `${mins}:${secs.toString().padStart(2, "0")}`;
+    const display = isOvertime ? `+${timeStr}` : timeStr;
+    this.el.textContent = display;
+    const remainingMins = remaining / 60;
+    let colourState;
+    if (isOvertime) {
+      colourState = "overtime";
+    } else if (remainingMins <= this.thresholds.critMinutes) {
+      colourState = "crit";
+    } else if (remainingMins <= this.thresholds.warnMinutes) {
+      colourState = "warn";
+    } else {
+      colourState = "normal";
+    }
+    this.el.dataset.state = colourState;
+    if (this.runState === "idle") {
+      this.labelEl.textContent = "Start";
+    } else if (this.runState === "running") {
+      this.labelEl.textContent = "Pause";
+    } else {
+      this.labelEl.textContent = "Resume | reset";
+    }
+  }
+};
+
+// src/blocks.ts
+var isEmpty = (s) => s.position.start.offset === s.position.end.offset;
+function sectionsFit(text, sections) {
+  const lineStart = [0];
+  for (let i = text.indexOf("\n"); i !== -1; i = text.indexOf("\n", i + 1)) {
+    lineStart.push(i + 1);
+  }
+  const locFits = (loc) => {
+    const base = lineStart[loc.line];
+    if (base === void 0 || base + loc.col !== loc.offset)
+      return false;
+    const lineEnd = loc.line + 1 < lineStart.length ? lineStart[loc.line + 1] - 1 : text.length;
+    return loc.offset <= lineEnd;
+  };
+  let cursor = 0;
+  for (const s of sections) {
+    if (isEmpty(s))
+      continue;
+    const { start, end } = s.position;
+    if (!locFits(start) || !locFits(end))
+      return false;
+    if (text.slice(cursor, start.offset).trim() !== "")
+      return false;
+    cursor = end.offset;
+  }
+  return text.slice(cursor).trim() === "";
+}
+function toBlocks(_text, sections) {
+  return sections.filter((s) => !isEmpty(s) && s.type !== "yaml" && s.type !== "comment").map((s) => ({
+    start: s.position.start.offset,
+    end: s.position.end.offset,
+    line: s.position.start.line
+  }));
+}
 
 // src/format.ts
 var import_obsidian3 = require("obsidian");
@@ -2390,8 +2525,7 @@ var PreachView = class extends import_obsidian4.ItemView {
   // Screen wake lock.
   // The .request("screen") call below is the browser Wake Lock API
   // (https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API).
-  // It is NOT a network request. The plugin makes no network calls at all -
-  // sermons stay in the vault, scripture popups read local CSB files.
+  // It is NOT a network request.
   async requestWakeLock() {
     try {
       if ("wakeLock" in navigator) {
@@ -2438,7 +2572,10 @@ var PreachView = class extends import_obsidian4.ItemView {
 // src/main.ts
 var PreachMDPlugin = class extends import_obsidian5.Plugin {
   async onload() {
+    var _a;
     await this.loadSettings();
+    const dir = (_a = this.manifest.dir) != null ? _a : `${this.app.vault.configDir}/plugins/${this.manifest.id}`;
+    setBibleFile((0, import_obsidian5.normalizePath)(`${dir}/bsb.txt`));
     this.registerView(
       PREACH_VIEW_TYPE,
       (leaf) => new PreachView(leaf, this)

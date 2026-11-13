@@ -7,15 +7,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { TFile } from "./obsidian-stub.mjs";
+import { TFile, net } from "./obsidian-stub.mjs";
 
 import {
 	BOOKS,
+	bibleStatus,
 	chapterPaths,
+	downloadBible,
 	fetchVerses,
 	normaliseBook,
 	notePassages,
+	parseBibleText,
 	parseReferences,
+	removeBible,
+	setBibleFile,
 } from "./.build/scripture.mjs";
 
 /**
@@ -220,10 +225,22 @@ test("a cross-chapter range does not swallow the text after it", () => {
 
 /** Builds a minimal vault: path -> file content, enough for fetchVerses. */
 function fakeApp(files) {
+	const log = [];
 	return {
+		log,
 		vault: {
 			getAbstractFileByPath: (p) => (p in files ? Object.assign(Object.create(TFile.prototype), { path: p }) : null),
 			read: async (f) => files[f.path],
+			adapter: {
+				read: async (p) => {
+					if (!(p in files)) throw new Error("ENOENT");
+					return files[p];
+				},
+				exists: async (p) => p in files,
+				write: async (p, t) => (log.push(`write ${p}`), void (files[p] = t)),
+				remove: async (p) => (log.push(`remove ${p}`), void delete files[p]),
+				rename: async (a, b) => (log.push(`rename ${a} -> ${b}`), (files[b] = files[a]), void delete files[a]),
+			},
 		},
 	};
 }
@@ -527,4 +544,159 @@ test("verseEnd Infinity reads to the end of the last chapter", async () => {
 		fetchVerses(app, "B8", ref({ book: "Amos", chapter: 9, verseStart: 1, chapterEnd: 9, verseEnd: Infinity })),
 		/Passage not found/,
 	);
+});
+
+// Offline Bible. Written by hand: 188 chapters of 27 verses plus 1001 of 26 is
+// 5,076 + 26,026 = 31,102 verses in 1,189 chapters. The parser checks totals,
+// not per-book shape, so one book can carry them all.
+const HEADER = [
+	"The Holy Bible, Berean Standard Bible, BSB is produced in cooperation with Bible Hub, Discovery Bible, unfoldingWord, Bible Aquifer, OpenBible.com, and the Berean Bible Translation Committee. \t",
+	"This text of God's Word has been dedicated to the public domain. Free resources and databases are available at BereanBible.com.\t",
+	"Verse\tBerean Standard Bible",
+];
+
+function bibleLines({ john = false } = {}) {
+	const lines = [];
+	for (let c = 1; c <= 1189; c++) {
+		for (let v = 1; v <= (c <= 188 ? 27 : 26); v++) {
+			const book = john && c <= 2 ? "John" : "Genesis";
+			const ch = john && c <= 2 ? c + 2 : c;
+			lines.push(`${book} ${ch}:${v}\t${book === "John" ? "b" : "g"}${ch}v${v}`);
+		}
+	}
+	return lines;
+}
+
+const bibleText = (opts, edit = (l) => l) =>
+	"\ufeff" + [...HEADER, ...edit(bibleLines(opts))].join("\r\n") + "\r\n";
+
+test("parseBibleText accepts a whole BSB with BOM, CRLF and header lines", () => {
+	const chapters = parseBibleText(bibleText());
+	assert.equal(chapters.size, 1189);
+	assert.equal(chapters.get("Genesis 1").get(1), "g1v1");
+	assert.equal(chapters.get("Genesis 1189").get(26), "g1189v26");
+});
+
+test("parseBibleText rejects anything cut, padded or foreign", () => {
+	const full = bibleText();
+	const bad = {
+		"cut mid-line": full.slice(0, -8),
+		"last line removed": bibleText({}, (l) => l.slice(0, -1)),
+		"unknown book": bibleText({}, (l) => l.map((x) => x.replace(/^Genesis 1189:/, "Sirach 1189:"))),
+		"duplicate plus a gap": bibleText({}, (l) => ((l[10] = l[9]), l)),
+	};
+	for (const [name, text] of Object.entries(bad)) assert.equal(parseBibleText(text), null, name);
+});
+
+test("parseBibleText refuses markup in verse text and accepts typography", () => {
+	const withVerse = (t) => bibleText({}, (l) => ((l[0] = `Genesis 1:1\t${t}`), l));
+	assert.equal(parseBibleText(withVerse("see ![x](https://e.x/a.png)")), null);
+	assert.equal(parseBibleText(withVerse("go to www.example.com")), null);
+	for (const t of ["- x", "---", "1. x", "3) x", "  2. x"]) assert.equal(parseBibleText(withVerse(t)), null, t);
+	assert.notEqual(parseBibleText(withVerse("\u201cHe said\u201d \u2014 and then\u2026")), null);
+});
+
+test("the vault folder wins when it holds the chapter", async () => {
+	setBibleFile("dl3/bsb.txt");
+	const app = fakeApp({ "B7/John/John 3.md": chapterFile(3, 3), "dl3/bsb.txt": bibleText({ john: true }) });
+	const rows = await fetchVerses(app, "B7", ref({ verseStart: 2, verseEnd: 3 }));
+	assert.deepEqual(flat(rows), ["3:2=c3v2 text", "3:3=c3v3 text"]);
+});
+
+test("the download serves a book the vault lacks", async () => {
+	setBibleFile("dl4/bsb.txt");
+	const app = fakeApp({ "dl4/bsb.txt": bibleText({ john: true }) });
+	const rows = await fetchVerses(app, "B8", ref({ verseStart: 1, verseEnd: 2 }));
+	assert.deepEqual(flat(rows), ["3:1=b3v1", "3:2=b3v2"]);
+});
+
+test("a passage the vault can only half serve comes wholly from the download", async () => {
+	setBibleFile("dl5/bsb.txt");
+	const app = fakeApp({ "B9/John/John 3.md": chapterFile(3, 3), "dl5/bsb.txt": bibleText({ john: true }) });
+	const rows = await fetchVerses(app, "B9", ref({ verseStart: 2, chapterEnd: 4, verseEnd: 1 }));
+	assert.equal(rows.length, 27, "3:2 to 3:27, then 4:1");
+	assert.deepEqual(flat(rows).slice(0, 2), ["3:2=b3v2", "3:3=b3v3"]);
+	assert.ok(flat(rows).every((r) => /=b\d/.test(r)), "no vault rows mixed in");
+	assert.equal(flat(rows).at(-1), "4:1=b4v1");
+});
+
+test("a damaged download plus a vault miss is not found", async () => {
+	setBibleFile("dl6/bsb.txt");
+	const app = fakeApp({ "dl6/bsb.txt": bibleText({ john: true }).slice(0, -8) });
+	await assert.rejects(fetchVerses(app, "B10", { ...ref(), raw: "John 3:1" }), /^Error: Passage not found: John 3:1$/);
+});
+
+test("bibleStatus reports absent, ready and damaged", async () => {
+	setBibleFile("dl7/bsb.txt");
+	assert.equal(await bibleStatus(fakeApp({ "dl7/bsb.txt.part": bibleText() })), "absent");
+	setBibleFile("dl7/bsb.txt");
+	assert.equal(await bibleStatus(fakeApp({ "dl7/bsb.txt": bibleText() })), "ready");
+	setBibleFile("dl7/bsb.txt");
+	assert.equal(await bibleStatus(fakeApp({ "dl7/bsb.txt": bibleText().slice(0, -8) })), "damaged");
+});
+
+test("downloadBible refuses bad downloads and writes nothing", async () => {
+	const attempts = {
+		"cut short": async () => ({ text: bibleText().slice(0, 100_000) }),
+		"plain text but not the Bible": async () => ({ text: "x".repeat(4_331_393) }),
+		"markup in a verse": async () => ({ text: bibleText({}, (l) => ((l[3] = "Genesis 1:4\t<b>x</b>"), l)) }),
+		"network drop": async () => {
+			throw new Error("net down");
+		},
+	};
+	const real = net.requestUrl;
+	try {
+		for (const [name, respond] of Object.entries(attempts)) {
+			setBibleFile("dl8/bsb.txt");
+			const app = fakeApp({ "dl8/bsb.txt": "old" });
+			net.requestUrl = respond;
+			await assert.rejects(downloadBible(app), undefined, name);
+			assert.deepEqual(app.log, [], name);
+		}
+	} finally {
+		net.requestUrl = real;
+	}
+});
+
+test("downloadBible writes the part file, removes the old one, then renames", async () => {
+	setBibleFile("dl9/bsb.txt");
+	const files = { "dl9/bsb.txt": "old" };
+	const app = fakeApp(files);
+	await assert.rejects(fetchVerses(app, "B11", { ...ref(), raw: "John 3:1" }), /Passage not found/);
+	const real = net.requestUrl;
+	net.requestUrl = async () => ({ text: bibleText({ john: true }) });
+	try {
+		await downloadBible(app);
+	} finally {
+		net.requestUrl = real;
+	}
+	assert.deepEqual(app.log, ["write dl9/bsb.txt.part", "remove dl9/bsb.txt", "rename dl9/bsb.txt.part -> dl9/bsb.txt"]);
+	assert.equal(await bibleStatus(app), "ready");
+	assert.deepEqual(flat(await fetchVerses(app, "B11", ref({ verseStart: 1, verseEnd: 1 }))), ["3:1=b3v1"]);
+});
+
+test("removeBible deletes the file and any part file", async () => {
+	setBibleFile("dl10/bsb.txt");
+	const app = fakeApp({ "dl10/bsb.txt": bibleText({ john: true }), "dl10/bsb.txt.part": "half" });
+	assert.equal((await fetchVerses(app, "B12", ref({ verseStart: 1, verseEnd: 1 }))).length, 1);
+	await removeBible(app);
+	await assert.rejects(fetchVerses(app, "B12", { ...ref(), raw: "John 3:1" }), /Passage not found/);
+	assert.deepEqual(app.log, ["remove dl10/bsb.txt", "remove dl10/bsb.txt.part"]);
+	assert.equal(await bibleStatus(app), "absent");
+});
+
+test("a failed read isn't remembered: the file appearing later is picked up", async () => {
+	setBibleFile("dl11/bsb.txt");
+	const files = {};
+	const app = fakeApp(files);
+	await assert.rejects(fetchVerses(app, "B13", { ...ref(), raw: "John 3:1" }), /Passage not found/);
+	files["dl11/bsb.txt"] = bibleText({ john: true });
+	assert.equal(await bibleStatus(app), "ready");
+	assert.deepEqual(flat(await fetchVerses(app, "B13", ref({ verseStart: 1, verseEnd: 1 }))), ["3:1=b3v1"]);
+});
+
+test("a leftover part file is ignored by lookups", async () => {
+	setBibleFile("dl12/bsb.txt");
+	const app = fakeApp({ "dl12/bsb.txt.part": bibleText({ john: true }) });
+	await assert.rejects(fetchVerses(app, "B14", { ...ref(), raw: "John 3:1" }), /Passage not found/);
 });

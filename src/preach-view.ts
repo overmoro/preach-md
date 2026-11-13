@@ -794,8 +794,7 @@ export class PreachView extends ItemView {
 	// Screen wake lock.
 	// The .request("screen") call below is the browser Wake Lock API
 	// (https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API).
-	// It is NOT a network request. The plugin makes no network calls at all -
-	// sermons stay in the vault, scripture popups read local CSB files.
+	// It is NOT a network request.
 	private async requestWakeLock(): Promise<void> {
 		try {
 			if ("wakeLock" in navigator) {

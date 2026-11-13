@@ -1,6 +1,7 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type { SettingDefinitionItem } from "obsidian";
 import type PreachMDPlugin from "./main";
+import { BSB_SIZE, BSB_URL, bibleStatus, downloadBible, removeBible } from "./scripture";
 
 export interface PreachMDSettings {
 	targetMinutes: number;
@@ -88,6 +89,8 @@ export function parseStoredSettings(raw: unknown): Partial<PreachMDSettings> {
 
 	return out;
 }
+
+const OFFLINE_BIBLE_DESC = `Download the Berean Standard Bible (public domain, ${BSB_SIZE}) once from ${new URL(BSB_URL).host}. After that, references your Bible folder can't supply expand offline.`;
 
 export class PreachMDSettingTab extends PluginSettingTab {
 	plugin: PreachMDPlugin;
@@ -193,7 +196,7 @@ export class PreachMDSettingTab extends PluginSettingTab {
 				items: [
 					{
 						name: "Bible folder path",
-						desc: "Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. \"Matthew\") or numbered canon-order (e.g. \"40 - Matthew\"); each chapter is a separate .md file.",
+						desc: "Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. \"Matthew\") or numbered canon-order (e.g. \"40 - Matthew\"); each chapter is a separate .md file. Checked before the offline Bible.",
 						aliases: ["bible", "csb", "scripture", "verses"],
 						control: {
 							type: "text",
@@ -202,9 +205,65 @@ export class PreachMDSettingTab extends PluginSettingTab {
 							placeholder: DEFAULT_SETTINGS.csbFolderPath,
 						},
 					},
+					{
+						name: "Offline Bible",
+						desc: OFFLINE_BIBLE_DESC,
+						aliases: ["bsb", "berean", "download", "offline"],
+						render: (setting) => this.renderOfflineBible(setting),
+					},
 				],
 			},
 		];
+	}
+
+	private downloading = false;
+	private repaintBible: (() => void) | null = null;
+
+	private renderOfflineBible(setting: Setting): void {
+		setting.setName("Offline Bible");
+		const paint = async (): Promise<void> => {
+			const status = this.downloading ? "downloading" : await bibleStatus(this.app);
+			setting.controlEl.empty();
+			if (status === "downloading") {
+				setting.setDesc(`Downloading the Berean Standard Bible (${BSB_SIZE})...`);
+				setting.addButton((b) => b.setButtonText("Downloading...").setDisabled(true));
+			} else if (status === "ready") {
+				setting.setDesc(
+					"Berean Standard Bible (public domain) is on this device. Used for any passage your Bible folder can't supply."
+				);
+				setting.addButton((b) =>
+					b.setButtonText("Remove").onClick(() => {
+						void removeBible(this.app).then(paint);
+					})
+				);
+			} else {
+				setting.setDesc(
+					status === "damaged"
+						? "The downloaded Bible is incomplete or damaged, so it isn't being used. Download it again."
+						: OFFLINE_BIBLE_DESC
+				);
+				setting.addButton((b) =>
+					b.setButtonText(status === "damaged" ? "Download again" : "Download").onClick(() => {
+						if (this.downloading) return;
+						this.downloading = true;
+						void paint();
+						void (async () => {
+							try {
+								await downloadBible(this.app);
+								new Notice("Berean Standard Bible downloaded.");
+							} catch (e) {
+								new Notice(`Couldn't download the Bible: ${e instanceof Error ? e.message : String(e)}`);
+							} finally {
+								this.downloading = false;
+								this.repaintBible?.();
+							}
+						})();
+					})
+				);
+			}
+		};
+		this.repaintBible = () => void paint();
+		void paint();
 	}
 
 	/**
@@ -345,7 +404,7 @@ export class PreachMDSettingTab extends PluginSettingTab {
 		new Setting(containerEl)
 			.setName("Bible folder path")
 			.setDesc(
-				"Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. \"Matthew\") or numbered canon-order (e.g. \"40 - Matthew\"); each chapter is a separate .md file."
+				"Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. \"Matthew\") or numbered canon-order (e.g. \"40 - Matthew\"); each chapter is a separate .md file. Checked before the offline Bible."
 			)
 			.addText((text) =>
 				text
@@ -356,5 +415,7 @@ export class PreachMDSettingTab extends PluginSettingTab {
 						void this.plugin.saveSettings();
 					})
 			);
+
+		this.renderOfflineBible(new Setting(containerEl));
 	}
 }

@@ -23,3 +23,9 @@ export class Setting {
 	setHeading() { return this; }
 	addText() { return this; }
 }
+
+export class Notice {}
+
+// Tests swap net.requestUrl to stand in for the network.
+export const net = { requestUrl: async () => { throw new Error("no network in tests"); } };
+export function requestUrl(req) { return net.requestUrl(req); }
