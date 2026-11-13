@@ -62,7 +62,7 @@ References in code blocks and callouts are intentionally skipped.
 - **Amber warning** - timer turns amber at this many minutes remaining (default: 5)
 - **Red warning** - timer turns red at this many minutes remaining (default: 1)
 - **Section heading level** - heading level used for the outline (default: 2, i.e. `##`)
-- **Text size** - sermon text scale in percent, 70 to 200 (default: 100). Follows the system text size where Obsidian supports it.
+- **Text size** - sermon text scale in percent, 70 to 200 (default: 100). Also follows the iOS system text size.
 - **Bible folder path** - vault-relative path to your Bible chapter files (default: `30_Knowledge/Theology/Bible/CSB`). See [Bible vault format](#bible-vault-format) below for the expected folder structure.
 
 ---
