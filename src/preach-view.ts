@@ -171,6 +171,12 @@ export class PreachView extends ItemView {
 		);
 
 		await this.requestWakeLock();
+		// The browser drops the lock when the page is hidden; take it again on return
+		this.registerDomEvent(document, "visibilitychange", () => {
+			if (document.visibilityState === "visible" && (!this.wakeLock || this.wakeLock.released)) {
+				void this.requestWakeLock();
+			}
+		});
 		this.suppressEdgeSwipes();
 
 		if (this.file) {
