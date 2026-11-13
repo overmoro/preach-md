@@ -563,6 +563,7 @@ var BSB_SIZE = "4.3 MB";
 var BSB_CHAPTERS = 1189;
 var BSB_VERSES = 31102;
 var MARKUP = /[[\]<>*_`#|\\~$^={}/&%@+]|www\./i;
+var BLOCK_START = /^\s*(?:-|\d+[.)](?:\s|$))/;
 var bibleFile = null;
 var bible = null;
 function setBibleFile(path) {
@@ -577,7 +578,7 @@ function parseBibleText(text) {
     if (!m)
       continue;
     const book = normaliseBook(m[1]);
-    if (book === null || MARKUP.test(m[4]))
+    if (book === null || MARKUP.test(m[4]) || BLOCK_START.test(m[4]))
       return null;
     const key = `${book} ${parseInt(m[2], 10)}`;
     const verse = parseInt(m[3], 10);
@@ -593,7 +594,7 @@ function parseBibleText(text) {
 function loadDownloadedBible(app) {
   if (bibleFile === null)
     return Promise.resolve(null);
-  bible != null ? bible : bible = app.vault.adapter.read(bibleFile).then(parseBibleText, () => null);
+  bible != null ? bible : bible = app.vault.adapter.read(bibleFile).then(parseBibleText, () => bible = null);
   return bible;
 }
 async function bibleStatus(app) {
@@ -861,6 +862,7 @@ var PreachMDSettingTab = class extends import_obsidian2.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.downloading = false;
+    this.repaintBible = null;
     this.plugin = plugin;
   }
   /**
@@ -1006,6 +1008,7 @@ var PreachMDSettingTab = class extends import_obsidian2.PluginSettingTab {
             this.downloading = true;
             void paint();
             void (async () => {
+              var _a;
               try {
                 await downloadBible(this.app);
                 new import_obsidian2.Notice("Berean Standard Bible downloaded.");
@@ -1013,13 +1016,14 @@ var PreachMDSettingTab = class extends import_obsidian2.PluginSettingTab {
                 new import_obsidian2.Notice(`Couldn't download the Bible: ${e instanceof Error ? e.message : String(e)}`);
               } finally {
                 this.downloading = false;
-                void paint();
+                (_a = this.repaintBible) == null ? void 0 : _a.call(this);
               }
             })();
           })
         );
       }
     };
+    this.repaintBible = () => void paint();
     void paint();
   }
   /**

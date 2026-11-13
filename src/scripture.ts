@@ -590,6 +590,8 @@ const BSB_VERSES = 31102;
 // Verse text is rendered as Markdown, so anything Markdown or HTML could act on
 // is refused, plus bare www. autolinks. The publisher's file contains none.
 const MARKUP = /[[\]<>*_`#|\\~$^={}/&%@+]|www\./i;
+// ...and a verse that starts like a list item or thematic break.
+const BLOCK_START = /^\s*(?:-|\d+[.)](?:\s|$))/;
 
 type BibleChapters = Map<string, Map<number, string>>;
 
@@ -610,7 +612,7 @@ export function parseBibleText(text: string): BibleChapters | null {
 		const m = /^(.+) (\d+):(\d+)\t(.*)$/.exec(line);
 		if (!m) continue;
 		const book = normaliseBook(m[1]);
-		if (book === null || MARKUP.test(m[4])) return null;
+		if (book === null || MARKUP.test(m[4]) || BLOCK_START.test(m[4])) return null;
 		const key = `${book} ${parseInt(m[2], 10)}`;
 		const verse = parseInt(m[3], 10);
 		let chapter = chapters.get(key);
@@ -625,7 +627,7 @@ export function parseBibleText(text: string): BibleChapters | null {
 
 function loadDownloadedBible(app: App): Promise<BibleChapters | null> {
 	if (bibleFile === null) return Promise.resolve(null);
-	bible ??= app.vault.adapter.read(bibleFile).then(parseBibleText, () => null);
+	bible ??= app.vault.adapter.read(bibleFile).then(parseBibleText, () => (bible = null));
 	return bible;
 }
 

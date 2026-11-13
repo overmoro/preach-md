@@ -217,6 +217,7 @@ export class PreachMDSettingTab extends PluginSettingTab {
 	}
 
 	private downloading = false;
+	private repaintBible: (() => void) | null = null;
 
 	private renderOfflineBible(setting: Setting): void {
 		setting.setName("Offline Bible");
@@ -254,13 +255,14 @@ export class PreachMDSettingTab extends PluginSettingTab {
 								new Notice(`Couldn't download the Bible: ${e instanceof Error ? e.message : String(e)}`);
 							} finally {
 								this.downloading = false;
-								void paint();
+								this.repaintBible?.();
 							}
 						})();
 					})
 				);
 			}
 		};
+		this.repaintBible = () => void paint();
 		void paint();
 	}
 

@@ -368,7 +368,7 @@ test("parseBibleText rejects anything cut, padded or foreign", () => {
 	const bad = {
 		"cut mid-line": full.slice(0, -8),
 		"last line removed": bibleText({}, (l) => l.slice(0, -1)),
-		"unknown book": bibleText({}, (l) => ((l[5] = "Sirach 1:6\tx"), l)),
+		"unknown book": bibleText({}, (l) => l.map((x) => x.replace(/^Genesis 1189:/, "Sirach 1189:"))),
 		"duplicate plus a gap": bibleText({}, (l) => ((l[10] = l[9]), l)),
 	};
 	for (const [name, text] of Object.entries(bad)) assert.equal(parseBibleText(text), null, name);
@@ -378,6 +378,7 @@ test("parseBibleText refuses markup in verse text and accepts typography", () =>
 	const withVerse = (t) => bibleText({}, (l) => ((l[0] = `Genesis 1:1\t${t}`), l));
 	assert.equal(parseBibleText(withVerse("see ![x](https://e.x/a.png)")), null);
 	assert.equal(parseBibleText(withVerse("go to www.example.com")), null);
+	for (const t of ["- x", "---", "1. x", "3) x", "  2. x"]) assert.equal(parseBibleText(withVerse(t)), null, t);
 	assert.notEqual(parseBibleText(withVerse("\u201cHe said\u201d \u2014 and then\u2026")), null);
 });
 
@@ -447,6 +448,7 @@ test("downloadBible writes the part file, removes the old one, then renames", as
 	setBibleFile("dl9/bsb.txt");
 	const files = { "dl9/bsb.txt": "old" };
 	const app = fakeApp(files);
+	await assert.rejects(fetchVerses(app, "B11", { ...ref(), raw: "John 3:1" }), /Passage not found/);
 	const real = net.requestUrl;
 	net.requestUrl = async () => ({ text: bibleText({ john: true }) });
 	try {
@@ -461,8 +463,26 @@ test("downloadBible writes the part file, removes the old one, then renames", as
 
 test("removeBible deletes the file and any part file", async () => {
 	setBibleFile("dl10/bsb.txt");
-	const app = fakeApp({ "dl10/bsb.txt": bibleText(), "dl10/bsb.txt.part": "half" });
+	const app = fakeApp({ "dl10/bsb.txt": bibleText({ john: true }), "dl10/bsb.txt.part": "half" });
+	assert.equal((await fetchVerses(app, "B12", ref({ verseStart: 1, verseEnd: 1 }))).length, 1);
 	await removeBible(app);
+	await assert.rejects(fetchVerses(app, "B12", { ...ref(), raw: "John 3:1" }), /Passage not found/);
 	assert.deepEqual(app.log, ["remove dl10/bsb.txt", "remove dl10/bsb.txt.part"]);
 	assert.equal(await bibleStatus(app), "absent");
+});
+
+test("a failed read isn't remembered: the file appearing later is picked up", async () => {
+	setBibleFile("dl11/bsb.txt");
+	const files = {};
+	const app = fakeApp(files);
+	await assert.rejects(fetchVerses(app, "B13", { ...ref(), raw: "John 3:1" }), /Passage not found/);
+	files["dl11/bsb.txt"] = bibleText({ john: true });
+	assert.equal(await bibleStatus(app), "ready");
+	assert.deepEqual(flat(await fetchVerses(app, "B13", ref({ verseStart: 1, verseEnd: 1 }))), ["3:1=b3v1"]);
+});
+
+test("a leftover part file is ignored by lookups", async () => {
+	setBibleFile("dl12/bsb.txt");
+	const app = fakeApp({ "dl12/bsb.txt.part": bibleText({ john: true }) });
+	await assert.rejects(fetchVerses(app, "B14", { ...ref(), raw: "John 3:1" }), /Passage not found/);
 });
