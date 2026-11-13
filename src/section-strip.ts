@@ -118,17 +118,24 @@ export class SectionStrip {
 	private plans: (number | null)[] = [];
 	private timeline = false;
 	private lastKey = "";
+	private downTarget: EventTarget | null = null;
 
 	constructor(
 		parent: HTMLElement,
 		private scrollEl: HTMLElement,
 		private elapsedSeconds: () => number | null,
+		private onJump?: () => void,
 	) {
 		this.nav = parent.createEl("nav", {
 			cls: "preach-strip preach-strip--hidden",
 			attr: { "aria-label": "Sections", "data-ignore-swipe": "true" },
 		});
 		this.playhead = createDiv({ cls: "preach-strip-playhead" });
+	}
+
+	/** Remember where the gesture began; iOS targets the click at finger-up, after the controls have woken. */
+	noteDown(target: EventTarget | null): void {
+		this.downTarget = target;
 	}
 
 	build(headings: HTMLElement[], pacing: boolean): void {
@@ -161,6 +168,8 @@ export class SectionStrip {
 			});
 			if (this.timeline) seg.setCssProps({ "--preach-strip-weight": String(plan ?? 0) });
 			seg.addEventListener("click", () => {
+				if (!(this.downTarget instanceof Node) || !seg.contains(this.downTarget)) return;
+				this.onJump?.();
 				const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 				heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
 			});
@@ -174,7 +183,10 @@ export class SectionStrip {
 		if (!first || !first.isConnected || height === 0) return;
 
 		const base = this.scrollEl.getBoundingClientRect().top;
-		const tops = this.headings.map((h) => h.getBoundingClientRect().top - base);
+		// Headings in folded callouts have no box; count them as below the line
+		const tops = this.headings.map((h) =>
+			h.getClientRects().length === 0 ? Infinity : h.getBoundingClientRect().top - base,
+		);
 		// ponytail: fixed reading line and 30s grace; revisit if Don reports early switching or flicker on stage
 		const line = Math.max(0.25 * height, 100);
 		const atBottom = this.scrollEl.scrollTop + height >= this.scrollEl.scrollHeight - 2;

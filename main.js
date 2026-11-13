@@ -1416,19 +1416,25 @@ function tidy(heading) {
   return read.minutes;
 }
 var SectionStrip = class {
-  constructor(parent, scrollEl, elapsedSeconds) {
+  constructor(parent, scrollEl, elapsedSeconds, onJump) {
     this.scrollEl = scrollEl;
     this.elapsedSeconds = elapsedSeconds;
+    this.onJump = onJump;
     this.headings = [];
     this.segs = [];
     this.plans = [];
     this.timeline = false;
     this.lastKey = "";
+    this.downTarget = null;
     this.nav = parent.createEl("nav", {
       cls: "preach-strip preach-strip--hidden",
       attr: { "aria-label": "Sections", "data-ignore-swipe": "true" }
     });
     this.playhead = createDiv({ cls: "preach-strip-playhead" });
+  }
+  /** Remember where the gesture began; iOS targets the click at finger-up, after the controls have woken. */
+  noteDown(target) {
+    this.downTarget = target;
   }
   build(headings, pacing) {
     this.playhead.remove();
@@ -1460,6 +1466,10 @@ var SectionStrip = class {
       if (this.timeline)
         seg.setCssProps({ "--preach-strip-weight": String(plan != null ? plan : 0) });
       seg.addEventListener("click", () => {
+        var _a2;
+        if (!(this.downTarget instanceof Node) || !seg.contains(this.downTarget))
+          return;
+        (_a2 = this.onJump) == null ? void 0 : _a2.call(this);
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
       });
@@ -1473,7 +1483,9 @@ var SectionStrip = class {
     if (!first || !first.isConnected || height === 0)
       return;
     const base = this.scrollEl.getBoundingClientRect().top;
-    const tops = this.headings.map((h) => h.getBoundingClientRect().top - base);
+    const tops = this.headings.map(
+      (h) => h.getClientRects().length === 0 ? Infinity : h.getBoundingClientRect().top - base
+    );
     const line = Math.max(0.25 * height, 100);
     const atBottom = this.scrollEl.scrollTop + height >= this.scrollEl.scrollHeight - 2;
     const current = currentSectionIndex(tops, line, height, atBottom);
@@ -2140,6 +2152,7 @@ var PreachView = class extends import_obsidian3.ItemView {
       this.handleExit();
     });
     this.strip = new SectionStrip(root, this.scrollEl, () => this.timer.elapsedSeconds());
+    this.registerDomEvent(root, "pointerdown", (e) => this.strip.noteDown(e.target), { capture: true });
     this.scrollEl.addEventListener("pointerdown", () => {
       this.resetIdleTimer();
     });

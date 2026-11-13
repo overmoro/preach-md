@@ -65,6 +65,7 @@ function check(plans, current, elapsed, expected) {
 test("sectionPace against Don's plan", () => {
 	check(D, 0, 0, { pace: "on", planned: 0, fraction: 0 });
 	check(D, 0, 90, { pace: "on", planned: 0, fraction: 0.5 });
+	check(D, 0, 180, { pace: "on", planned: 1, fraction: 0 });
 	check(D, 0, 210, { pace: "on", planned: 1, fraction: 0.1 });
 	check(D, 0, 240, { pace: "behind", planned: 1, fraction: 0.2 });
 	check(D, 2, 420, { pace: "ahead", planned: 1, fraction: 0.8 });
@@ -88,6 +89,12 @@ test("sectionPace with decimal minutes", () => {
 
 test("sectionPace is null when nothing has a plan", () => {
 	assert.equal(sectionPace([null, null], 0, 10), null);
+});
+
+test("currentSectionIndex treats a heading with no box (Infinity) as below the line", () => {
+	assert.equal(currentSectionIndex([-800, -20, Infinity], 250, 1000, false), 1);
+	assert.equal(currentSectionIndex([-800, -20, Infinity], 250, 1000, true), 1);
+	assert.equal(currentSectionIndex([Infinity, Infinity], 250, 1000, false), -1);
 });
 
 test("currentSectionIndex", () => {

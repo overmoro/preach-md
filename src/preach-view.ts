@@ -383,6 +383,8 @@ export class PreachView extends ItemView {
 		// Must come after bottomBtns: the idle CSS reaches it with a sibling selector
 		this.strip = new SectionStrip(root, this.scrollEl, () => this.timer.elapsedSeconds());
 
+		this.registerDomEvent(root, "pointerdown", (e) => this.strip.noteDown(e.target), { capture: true });
+
 		// Idle-fade: reset on any tap on the scroll area
 		this.scrollEl.addEventListener("pointerdown", () => {
 			this.resetIdleTimer();
