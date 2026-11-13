@@ -47,3 +47,34 @@ test("recognises the square emoji and rewrites to the circle", () => {
 test("leaves a neighbouring highlight alone", () => {
 	assert.equal(run("==🔴a== and b", "b", "blue"), "==🔴a== and ==🔵b==");
 });
+
+test("a selection inside a coloured highlight recolours the whole span", () => {
+	assert.equal(run("==🔴Grace alone saves==", "alone", "blue"), "==🔵Grace alone saves==");
+	assert.equal(run("==🔴Grace alone==", "Grace", "blue"), "==🔵Grace alone==");
+});
+
+test("a selection inside a highlight unwraps the whole span on the same colour", () => {
+	assert.equal(run("x ==🔴Grace alone== y", "alone", "red"), "x Grace alone y");
+	assert.equal(run("x ==Grace alone== y", "alone", null), "x Grace alone y");
+});
+
+test("only the span holding the selection changes", () => {
+	assert.equal(run("==🔴a== then ==🟢b c==", "c", "blue"), "==🔴a== then ==🔵b c==");
+});
+
+test("refuses a selection that crosses a highlight boundary", () => {
+	assert.equal(run("==🔴Grace== alone", "Grace alone", "blue"), null);
+	assert.equal(run("x ==Grace== alone", "x ==Grace", "blue"), null);
+});
+
+test("refuses a selection that contains ==", () => {
+	assert.equal(run("a ==b== c", "a ==b== c", "blue"), null);
+});
+
+test("refuses text sitting between two highlights", () => {
+	assert.equal(run("==a==b==c==", "b", "blue"), null);
+});
+
+test("a highlight on another line does not affect the selection", () => {
+	assert.equal(run("==🔴a==\nplain text", "plain", "blue"), "==🔴a==\n==🔵plain== text");
+});

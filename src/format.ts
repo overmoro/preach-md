@@ -38,35 +38,49 @@ const EMOJI_COLOUR: [string, HighlightColour][] = [
 ];
 
 export function highlightColoursSupported(): boolean {
-	return requireApiVersion("1.14.0");
+	return requireApiVersion("1.14.4");
 }
 
 /**
  * Highlight data[start, end) with `colour` (null for the plain default).
- * Text that is exactly the content of an existing highlight is recoloured, or
- * unwrapped when it already has that colour. Anything else is wrapped.
+ * A selection inside an existing highlight acts on that whole highlight: a
+ * different colour recolours it, the same colour unwraps it. Plain text is
+ * wrapped. Returns null when the selection crosses a highlight boundary.
  */
 export function applyHighlight(
 	data: string,
 	start: number,
 	end: number,
 	colour: HighlightColour | null
-): string {
+): string | null {
 	const body = data.slice(start, end);
-	const before = data.slice(0, start);
-	const after = data.slice(end);
+	if (body.includes("==")) return null;
 	const mark = colour ? HIGHLIGHT_COLOURS.find((c) => c.name === colour)?.emoji ?? "" : "";
 
-	if (after.startsWith("==")) {
-		const found = EMOJI_COLOUR.find(([e]) => before.endsWith("==" + e));
-		if (found || before.endsWith("==")) {
-			const current = found ? found[1] : null;
-			const head = before.slice(0, before.length - 2 - (found ? found[0].length : 0));
-			const tail = after.slice(2);
-			return current === colour ? head + body + tail : head + "==" + mark + body + "==" + tail;
+	const lineStart = data.lastIndexOf("\n", start - 1) + 1;
+	const nl = data.indexOf("\n", end);
+	const lineEnd = nl === -1 ? data.length : nl;
+
+	let i = data.indexOf("==", lineStart);
+	while (i !== -1 && i < lineEnd) {
+		const close = data.indexOf("==", i + 2);
+		if (close === -1 || close >= lineEnd) break;
+		const emoji = EMOJI_COLOUR.find(([e]) => data.startsWith(e, i + 2));
+		const contentStart = i + 2 + (emoji ? emoji[0].length : 0);
+		if (end > i && start < close + 2) {
+			if (start < contentStart || end > close) return null;
+			const head = data.slice(0, i);
+			const content = data.slice(contentStart, close);
+			const tail = data.slice(close + 2);
+			return (emoji ? emoji[1] : null) === colour
+				? head + content + tail
+				: head + "==" + mark + content + "==" + tail;
 		}
+		i = data.indexOf("==", close + 2);
 	}
-	return before + "==" + mark + body + "==" + after;
+
+	if (data.slice(0, start).endsWith("==") || data.slice(end).startsWith("==")) return null;
+	return data.slice(0, start) + "==" + mark + body + "==" + data.slice(end);
 }
 
 /** Result returned by captureFromSelection. */
@@ -235,7 +249,7 @@ export class FormatManager {
 	 */
 	async applyFormat(
 		wrapper: FormatWrapper,
-		edit?: (data: string, start: number, end: number) => string
+		edit?: (data: string, start: number, end: number) => string | null
 	): Promise<void> {
 		if (!this.capturedSelection || !this.file) return;
 
@@ -246,8 +260,10 @@ export class FormatManager {
 		const sourceContent = block.content;
 
 		let sourceIdx = sourceContent.indexOf(selectedText);
+		let fuzzy = false;
 
 		if (sourceIdx === -1) {
+			fuzzy = true;
 			const stripped = sourceContent.replace(/[*_~=]/g, "");
 			const strippedIdx = stripped.indexOf(selectedText);
 			if (strippedIdx !== -1) {
@@ -269,11 +285,22 @@ export class FormatManager {
 			return;
 		}
 
+		// The fuzzy match guesses where the selection starts; it cannot say where it ends.
+		if (edit && fuzzy) {
+			this.showFormatFailNotice("collision");
+			return;
+		}
+
 		const absoluteStart = block.startOffset + sourceIdx;
 		const absoluteEnd = absoluteStart + selectedText.length;
 
+		let refused = false;
 		await this.app.vault.process(this.file, (data) => {
-			if (edit) return edit(data, absoluteStart, absoluteEnd);
+			if (edit) {
+				const out = edit(data, absoluteStart, absoluteEnd);
+				if (out === null) refused = true;
+				return out ?? data;
+			}
 			return (
 				data.slice(0, absoluteStart) +
 				wrapper.open +
@@ -284,6 +311,7 @@ export class FormatManager {
 		});
 
 		this.capturedSelection = null;
+		if (refused) this.showFormatFailNotice("collision");
 	}
 
 	/**
@@ -450,7 +478,7 @@ export class PreachFormatToolbar {
 			title: string,
 			wrapper: FormatWrapper,
 			extraClass?: string,
-			edit?: (data: string, start: number, end: number) => string,
+			edit?: (data: string, start: number, end: number) => string | null,
 			row: HTMLElement = mainRow
 		): void => {
 			const btn = row.createEl("button", {
