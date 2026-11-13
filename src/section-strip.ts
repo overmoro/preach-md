@@ -168,8 +168,8 @@ export class SectionStrip {
 			});
 			if (this.timeline) seg.setCssProps({ "--preach-strip-weight": String(plan ?? 0) });
 			seg.addEventListener("click", (e) => {
-				// detail 0 is a keyboard or assistive-technology click, which has no pointerdown
-				if (e.detail !== 0 && !(this.downTarget instanceof Node && seg.contains(this.downTarget))) return;
+				// detail 0: activated without a pointer, e.g. the keyboard
+				if (e.detail !== 0 && !seg.contains(this.downTarget as Node | null)) return;
 				this.onJump?.();
 				const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 				heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });

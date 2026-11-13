@@ -95,6 +95,7 @@ test("currentSectionIndex treats a heading with no box (Infinity) as below the l
 	assert.equal(currentSectionIndex([-800, -20, Infinity], 250, 1000, false), 1);
 	assert.equal(currentSectionIndex([-800, -20, Infinity], 250, 1000, true), 1);
 	assert.equal(currentSectionIndex([Infinity, Infinity], 250, 1000, false), -1);
+	assert.equal(currentSectionIndex([Infinity, Infinity, Infinity, -20], 250, 1000, false), 3);
 });
 
 test("currentSectionIndex", () => {
