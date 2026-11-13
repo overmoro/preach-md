@@ -167,8 +167,9 @@ export class SectionStrip {
 				attr: { "aria-label": plan === null ? label : `${label}, ${plan} min` },
 			});
 			if (this.timeline) seg.setCssProps({ "--preach-strip-weight": String(plan ?? 0) });
-			seg.addEventListener("click", () => {
-				if (!(this.downTarget instanceof Node) || !seg.contains(this.downTarget)) return;
+			seg.addEventListener("click", (e) => {
+				// detail 0 is a keyboard or assistive-technology click, which has no pointerdown
+				if (e.detail !== 0 && !(this.downTarget instanceof Node && seg.contains(this.downTarget))) return;
 				this.onJump?.();
 				const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 				heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });

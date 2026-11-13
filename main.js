@@ -1465,9 +1465,9 @@ var SectionStrip = class {
       });
       if (this.timeline)
         seg.setCssProps({ "--preach-strip-weight": String(plan != null ? plan : 0) });
-      seg.addEventListener("click", () => {
+      seg.addEventListener("click", (e) => {
         var _a2;
-        if (!(this.downTarget instanceof Node) || !seg.contains(this.downTarget))
+        if (e.detail !== 0 && !(this.downTarget instanceof Node && seg.contains(this.downTarget)))
           return;
         (_a2 = this.onJump) == null ? void 0 : _a2.call(this);
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
