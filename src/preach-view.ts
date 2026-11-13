@@ -8,6 +8,8 @@ import {
 } from "obsidian";
 import type PreachMDPlugin from "./main";
 import { PreachTimer } from "./timer";
+import type { TimerThresholds } from "./timer";
+import { noteTargetMinutes } from "./settings";
 import { HighlightManager, parseBlocks } from "./highlight";
 import { ScriptureExpander } from "./scripture";
 import { FormatManager, PreachFormatToolbar } from "./format";
@@ -170,6 +172,12 @@ export class PreachView extends ItemView {
 			this.containerEl
 		);
 
+		// The browser drops the lock when the page is hidden; take it again on return
+		this.registerDomEvent(document, "visibilitychange", () => {
+			if (document.visibilityState === "visible" && (!this.wakeLock || this.wakeLock.released)) {
+				void this.requestWakeLock();
+			}
+		});
 		await this.requestWakeLock();
 		this.suppressEdgeSwipes();
 
@@ -182,6 +190,15 @@ export class PreachView extends ItemView {
 			this.app.vault.on("modify", (modified) => {
 				if (this.file && modified.path === this.file.path) {
 					void this.renderFile(this.file);
+				}
+			})
+		);
+
+		// Frontmatter lands in the metadata cache after the modify event
+		this.registerEvent(
+			this.app.metadataCache.on("changed", (changed) => {
+				if (this.file && changed.path === this.file.path) {
+					this.timer.updateThresholds(this.timerThresholds());
 				}
 			})
 		);
@@ -241,6 +258,7 @@ export class PreachView extends ItemView {
 
 	async setFile(file: TFile): Promise<void> {
 		this.file = file;
+		if (this.timer) this.timer.updateThresholds(this.timerThresholds());
 		if (this.highlightManager) {
 			this.highlightManager.updateFile(file);
 		}
@@ -250,6 +268,18 @@ export class PreachView extends ItemView {
 		if (this.scrollEl) {
 			await this.renderFile(file);
 		}
+	}
+
+	private timerThresholds(): TimerThresholds {
+		const { targetMinutes, warnMinutes, critMinutes } = this.plugin.settings;
+		const frontmatter = this.file
+			? this.app.metadataCache.getFileCache(this.file)?.frontmatter
+			: undefined;
+		return {
+			targetMinutes: noteTargetMinutes(frontmatter, targetMinutes),
+			warnMinutes,
+			critMinutes,
+		};
 	}
 
 	// Build the full preach UI into containerEl
@@ -267,11 +297,7 @@ export class PreachView extends ItemView {
 
 		// Timer - top-centre, always visible, persistent
 		this.timerEl = root.createDiv({ cls: "preach-timer-corner" });
-		this.timer = new PreachTimer(this.timerEl, {
-			targetMinutes: this.plugin.settings.targetMinutes,
-			warnMinutes: this.plugin.settings.warnMinutes,
-			critMinutes: this.plugin.settings.critMinutes,
-		});
+		this.timer = new PreachTimer(this.timerEl, this.timerThresholds());
 
 		// Bottom buttons container - three floating icon-only buttons, auto-fade
 		this.bottomBtns = root.createDiv({ cls: "preach-bottom-btns" });
