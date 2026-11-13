@@ -407,7 +407,7 @@
 	--preach-mark-bg: var(--highlight-background-purple);
 }
 
-/* Whole-note fallback render shows the worker's frontmatter block otherwise */
+/* Fallback whole-note render */
 .preach-body pre.frontmatter {
 	display: none;
 }

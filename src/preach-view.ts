@@ -97,7 +97,7 @@ export class PreachView extends ItemView {
 	private formatManager!: FormatManager;
 	private preachFormatToolbar: PreachFormatToolbar | null = null;
 
-	// Current preach body element (replaced on each renderFile; toolbar queries via getter)
+	// Current preach body element (replaced on each render; toolbar queries via getter)
 	private preachBodyEl: HTMLElement | null = null;
 
 	// Text and blocks of the last block render; null while showing the fallback
@@ -213,6 +213,7 @@ export class PreachView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.renderGen++;
 		if (this.idleTimeout !== null) {
 			window.clearTimeout(this.idleTimeout);
 			this.idleTimeout = null;

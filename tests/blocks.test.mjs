@@ -71,6 +71,10 @@ test("sectionsFit rejects text that has moved on from its sections", () => {
 	assert.ok(!sectionsFit(fenceText.replace("Intro ", ""), fence));
 	assert.ok(!sectionsFit(fenceText.replace("Intro", "Intro**"), fence));
 	assert.ok(!sectionsFit("Extra line\n" + fenceText, fence));
+	// Sections from the parser for "A\n\n  \nB"; only the gap between them differs.
+	const gap = [sec("paragraph", 0, 0, 0, 0, 1, 1), sec("paragraph", 3, 0, 6, 3, 1, 7)];
+	assert.ok(sectionsFit("A\n\n  \nB", gap));
+	assert.ok(!sectionsFit("A\n\nXY\nB", gap));
 });
 
 test("sectionsFit handles notes with no sections", () => {

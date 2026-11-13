@@ -322,7 +322,7 @@ export class FormatManager {
  * based on whether a valid selection exists inside .preach-body.
  *
  * bodyElGetter is called on each selection event so it always has
- * the current body element (which is replaced on every renderFile call).
+ * the current body element (which is replaced on every render).
  */
 export class PreachFormatToolbar {
 	private formatManager: FormatManager;

@@ -1581,7 +1581,7 @@ var PreachView = class extends import_obsidian3.ItemView {
     this.exitConfirming = false;
     this.exitConfirmTimeout = null;
     this.preachFormatToolbar = null;
-    // Current preach body element (replaced on each renderFile; toolbar queries via getter)
+    // Current preach body element (replaced on each render; toolbar queries via getter)
     this.preachBodyEl = null;
     // Text and blocks of the last block render; null while showing the fallback
     this.snapshot = null;
@@ -1667,6 +1667,7 @@ var PreachView = class extends import_obsidian3.ItemView {
   }
   async onClose() {
     var _a, _b;
+    this.renderGen++;
     if (this.idleTimeout !== null) {
       window.clearTimeout(this.idleTimeout);
       this.idleTimeout = null;
