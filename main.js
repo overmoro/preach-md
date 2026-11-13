@@ -279,11 +279,7 @@ var PreachMDSettingTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(containerEl).setName("Display").setHeading();
     new import_obsidian.Setting(containerEl).setName("Text size (%)").setDesc("Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.").addText(
       (text) => text.setPlaceholder("100").setValue(String(this.plugin.settings.textScalePercent)).onChange((value) => {
-        const n = parseInt(value, 10);
-        if (!isNaN(n) && n >= MIN_TEXT_SCALE && n <= MAX_TEXT_SCALE) {
-          this.plugin.settings.textScalePercent = n;
-          void this.plugin.saveSettings();
-        }
+        void this.setControlValue("textScalePercent", value);
       })
     );
     new import_obsidian.Setting(containerEl).setName("Scripture").setHeading();
@@ -1899,13 +1895,15 @@ var PreachView = class extends import_obsidian3.ItemView {
     const next = Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, settings.textScalePercent + step));
     if (next === settings.textScalePercent)
       return;
-    const scrollTop = this.scrollEl.getBoundingClientRect().top;
-    const anchor = Array.from(this.scrollEl.querySelectorAll(".preach-block")).find((el) => el.getBoundingClientRect().bottom > scrollTop);
-    const before = anchor ? anchor.getBoundingClientRect().top - scrollTop : 0;
+    const top = this.scrollEl.getBoundingClientRect().top;
+    const anchor = Array.from(this.scrollEl.querySelectorAll(".preach-block")).find((el) => el.getBoundingClientRect().bottom > top);
+    const r0 = anchor == null ? void 0 : anchor.getBoundingClientRect();
+    const fraction = r0 && r0.height > 0 ? (top - r0.top) / r0.height : 0;
     settings.textScalePercent = next;
     this.applyTextScale();
     if (anchor) {
-      this.scrollEl.scrollTop += anchor.getBoundingClientRect().top - scrollTop - before;
+      const r1 = anchor.getBoundingClientRect();
+      this.scrollEl.scrollTop += r1.top + fraction * r1.height - top;
     }
     void this.plugin.saveSettings();
   }

@@ -325,11 +325,7 @@ export class PreachMDSettingTab extends PluginSettingTab {
 					.setPlaceholder("100")
 					.setValue(String(this.plugin.settings.textScalePercent))
 					.onChange((value) => {
-						const n = parseInt(value, 10);
-						if (!isNaN(n) && n >= MIN_TEXT_SCALE && n <= MAX_TEXT_SCALE) {
-							this.plugin.settings.textScalePercent = n;
-							void this.plugin.saveSettings();
-						}
+						void this.setControlValue("textScalePercent", value);
 					})
 			);
 

@@ -10,8 +10,8 @@
 	/* Typography */
 	--preach-font-family: Georgia, "Times New Roman", serif;
 	--preach-text-scale: 1;
-	/* iOS system text scale (unitless, 1 at the default size) from Obsidian 1.14+; absent elsewhere */
-	--preach-base-size: calc(1rem * var(--preferred-text-scale, 1));
+	/* Obsidian sets the root font size to its font setting times the iOS text scale, so rem already follows both */
+	--preach-base-size: 1rem;
 	--preach-font-size: calc(var(--preach-base-size) * 1.35 * var(--preach-text-scale));
 	--preach-h2-size: calc(var(--preach-base-size) * 1.65 * var(--preach-text-scale));
 	--preach-line-height: 1.85;
@@ -246,6 +246,10 @@
 .preach-bottom-btns--idle {
 	opacity: 0;
 	transition: opacity 300ms ease-out;
+	pointer-events: none;
+}
+
+.preach-bottom-btns--idle * {
 	pointer-events: none;
 }
 

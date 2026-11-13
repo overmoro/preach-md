@@ -384,15 +384,17 @@ export class PreachView extends ItemView {
 		const next = Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, settings.textScalePercent + step));
 		if (next === settings.textScalePercent) return;
 
-		const scrollTop = this.scrollEl.getBoundingClientRect().top;
+		const top = this.scrollEl.getBoundingClientRect().top;
 		const anchor = Array.from(this.scrollEl.querySelectorAll<HTMLElement>(".preach-block"))
-			.find((el) => el.getBoundingClientRect().bottom > scrollTop);
-		const before = anchor ? anchor.getBoundingClientRect().top - scrollTop : 0;
+			.find((el) => el.getBoundingClientRect().bottom > top);
+		const r0 = anchor?.getBoundingClientRect();
+		const fraction = r0 && r0.height > 0 ? (top - r0.top) / r0.height : 0;
 
 		settings.textScalePercent = next;
 		this.applyTextScale();
 		if (anchor) {
-			this.scrollEl.scrollTop += anchor.getBoundingClientRect().top - scrollTop - before;
+			const r1 = anchor.getBoundingClientRect();
+			this.scrollEl.scrollTop += r1.top + fraction * r1.height - top;
 		}
 		void this.plugin.saveSettings();
 	}
