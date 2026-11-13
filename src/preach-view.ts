@@ -7,7 +7,10 @@ import {
 	Component,
 } from "obsidian";
 import type PreachMDPlugin from "./main";
+import { MAX_TEXT_SCALE, MIN_TEXT_SCALE, TEXT_SCALE_STEP } from "./settings";
 import { PreachTimer } from "./timer";
+import type { TimerThresholds } from "./timer";
+import { noteTargetMinutes } from "./settings";
 import { HighlightManager, parseBlocks } from "./highlight";
 import { ScriptureExpander } from "./scripture";
 import { FormatManager, PreachFormatToolbar } from "./format";
@@ -170,6 +173,12 @@ export class PreachView extends ItemView {
 			this.containerEl
 		);
 
+		// The browser drops the lock when the page is hidden; take it again on return
+		this.registerDomEvent(document, "visibilitychange", () => {
+			if (document.visibilityState === "visible" && (!this.wakeLock || this.wakeLock.released)) {
+				void this.requestWakeLock();
+			}
+		});
 		await this.requestWakeLock();
 		this.suppressEdgeSwipes();
 
@@ -182,6 +191,15 @@ export class PreachView extends ItemView {
 			this.app.vault.on("modify", (modified) => {
 				if (this.file && modified.path === this.file.path) {
 					void this.renderFile(this.file);
+				}
+			})
+		);
+
+		// Frontmatter lands in the metadata cache after the modify event
+		this.registerEvent(
+			this.app.metadataCache.on("changed", (changed) => {
+				if (this.file && changed.path === this.file.path) {
+					this.timer.updateThresholds(this.timerThresholds());
 				}
 			})
 		);
@@ -241,6 +259,7 @@ export class PreachView extends ItemView {
 
 	async setFile(file: TFile): Promise<void> {
 		this.file = file;
+		if (this.timer) this.timer.updateThresholds(this.timerThresholds());
 		if (this.highlightManager) {
 			this.highlightManager.updateFile(file);
 		}
@@ -250,6 +269,18 @@ export class PreachView extends ItemView {
 		if (this.scrollEl) {
 			await this.renderFile(file);
 		}
+	}
+
+	private timerThresholds(): TimerThresholds {
+		const { targetMinutes, warnMinutes, critMinutes } = this.plugin.settings;
+		const frontmatter = this.file
+			? this.app.metadataCache.getFileCache(this.file)?.frontmatter
+			: undefined;
+		return {
+			targetMinutes: noteTargetMinutes(frontmatter, targetMinutes),
+			warnMinutes,
+			critMinutes,
+		};
 	}
 
 	// Build the full preach UI into containerEl
@@ -267,11 +298,7 @@ export class PreachView extends ItemView {
 
 		// Timer - top-centre, always visible, persistent
 		this.timerEl = root.createDiv({ cls: "preach-timer-corner" });
-		this.timer = new PreachTimer(this.timerEl, {
-			targetMinutes: this.plugin.settings.targetMinutes,
-			warnMinutes: this.plugin.settings.warnMinutes,
-			critMinutes: this.plugin.settings.critMinutes,
-		});
+		this.timer = new PreachTimer(this.timerEl, this.timerThresholds());
 
 		// Bottom buttons container - three floating icon-only buttons, auto-fade
 		this.bottomBtns = root.createDiv({ cls: "preach-bottom-btns" });
@@ -292,6 +319,22 @@ export class PreachView extends ItemView {
 			this.resetIdleTimer();
 			this.toggleOutline();
 		});
+
+		// Text size: A- / A+ in the bottom centre
+		const sizeGroup = this.bottomBtns.createDiv({ cls: "preach-bottom-size" });
+		for (const [label, aria, step] of [["A-", "Smaller text", -TEXT_SCALE_STEP], ["A+", "Larger text", TEXT_SCALE_STEP]] as const) {
+			const btn = sizeGroup.createEl("button", {
+				cls: "preach-corner-btn preach-size-btn",
+				text: label,
+				attr: { "aria-label": aria, title: aria },
+			});
+			btn.addEventListener("pointerdown", (e: PointerEvent) => {
+				e.stopPropagation();
+				this.resetIdleTimer();
+				this.stepTextScale(step);
+			});
+		}
+		this.applyTextScale();
 
 		// Right-side group: edit + exit
 		const rightGroup = this.bottomBtns.createDiv({ cls: "preach-bottom-right" });
@@ -353,6 +396,33 @@ export class PreachView extends ItemView {
 
 		// Start idle timer immediately
 		this.resetIdleTimer();
+	}
+
+	private applyTextScale(): void {
+		this.containerEl.setCssProps({
+			"--preach-text-scale": String(this.plugin.settings.textScalePercent / 100),
+		});
+	}
+
+	// Step the scale, keeping the topmost visible block where it was on screen.
+	private stepTextScale(step: number): void {
+		const settings = this.plugin.settings;
+		const next = Math.min(MAX_TEXT_SCALE, Math.max(MIN_TEXT_SCALE, settings.textScalePercent + step));
+		if (next === settings.textScalePercent) return;
+
+		const top = this.scrollEl.getBoundingClientRect().top;
+		const anchor = Array.from(this.scrollEl.querySelectorAll<HTMLElement>(".preach-block"))
+			.find((el) => el.getBoundingClientRect().bottom > top);
+		const r0 = anchor?.getBoundingClientRect();
+		const fraction = r0 && r0.height > 0 ? (top - r0.top) / r0.height : 0;
+
+		settings.textScalePercent = next;
+		this.applyTextScale();
+		if (anchor) {
+			const r1 = anchor.getBoundingClientRect();
+			this.scrollEl.scrollTop += r1.top + fraction * r1.height - top;
+		}
+		void this.plugin.saveSettings();
 	}
 
 	// Idle-fade: show bottom buttons, then fade after 3 seconds of no interaction.

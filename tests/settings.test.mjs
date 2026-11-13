@@ -1,13 +1,13 @@
 // Tests for the declarative settings definitions.
 //
-// The definitions are a second description of the same five settings that
+// The definitions are a second description of the same settings that
 // display() builds by hand. Nothing in the type system ties a control's `key`
 // to a real settings field, so a typo there compiles cleanly and silently makes
 // that setting a no-op when edited from Obsidian's settings search.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { PreachMDSettingTab, DEFAULT_SETTINGS, parseStoredSettings } from "./.build/settings.mjs";
+import { PreachMDSettingTab, DEFAULT_SETTINGS, parseStoredSettings, noteTargetMinutes } from "./.build/settings.mjs";
 
 /** A settings tab wired to a fake plugin that records saves. */
 function makeTab() {
@@ -161,4 +161,40 @@ test("prototype keys in stored data cannot reach settings", () => {
 	const out = parseStoredSettings(JSON.parse('{"__proto__":{"targetMinutes":999}}'));
 	assert.deepEqual(out, {});
 	assert.equal({ ...DEFAULT_SETTINGS, ...out }.targetMinutes, DEFAULT_SETTINGS.targetMinutes);
+});
+
+test("textScalePercent keeps whole numbers from 70 to 200 and drops the rest", () => {
+	for (const ok of [70, 100, 150, 200]) {
+		assert.equal(parseStoredSettings({ textScalePercent: ok }).textScalePercent, ok);
+	}
+	for (const bad of [69, 201, 0, -100, 100.5, "120", null, NaN]) {
+		assert.equal(parseStoredSettings({ textScalePercent: bad }).textScalePercent, undefined, `${String(bad)} should be dropped`);
+	}
+	assert.equal(DEFAULT_SETTINGS.textScalePercent, 100);
+});
+
+test("setControlValue bounds textScalePercent", async () => {
+	const { tab, plugin } = makeTab();
+	await tab.setControlValue("textScalePercent", 130);
+	assert.equal(plugin.settings.textScalePercent, 130);
+	for (const bad of [69, 201, 110.5, "abc", ""]) {
+		await tab.setControlValue("textScalePercent", bad);
+		assert.equal(plugin.settings.textScalePercent, 130, `${String(bad)} should be ignored`);
+	}
+});
+
+test("noteTargetMinutes reads preach-minutes as a number or numeric string", () => {
+	assert.equal(noteTargetMinutes({ "preach-minutes": 35 }, 30), 35);
+	assert.equal(noteTargetMinutes({ "preach-minutes": "42" }, 30), 42);
+	assert.equal(noteTargetMinutes({ "preach-minutes": 1 }, 30), 1);
+	assert.equal(noteTargetMinutes({ "preach-minutes": 1440 }, 30), 1440);
+});
+
+test("noteTargetMinutes falls back to the setting when absent or invalid", () => {
+	assert.equal(noteTargetMinutes(undefined, 30), 30);
+	assert.equal(noteTargetMinutes(null, 30), 30);
+	assert.equal(noteTargetMinutes({}, 30), 30);
+	for (const bad of [0, -5, 1441, 12.5, "abc", "", "  ", "12.5", null, true, [35], NaN]) {
+		assert.equal(noteTargetMinutes({ "preach-minutes": bad }, 25), 25, String(bad));
+	}
 });
