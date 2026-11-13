@@ -2591,7 +2591,8 @@ var PreachView = class extends import_obsidian4.ItemView {
         });
         btn.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
-          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
           this.closeOutline();
           this.closePassage();
         });
@@ -2859,7 +2860,8 @@ var PreachMDPlugin = class extends import_obsidian5.Plugin {
   async saveSettings() {
     await this.saveData(this.settings);
     for (const leaf of this.app.workspace.getLeavesOfType(PREACH_VIEW_TYPE)) {
-      leaf.view.applyTextScale();
+      if (leaf.view instanceof PreachView)
+        leaf.view.applyTextScale();
     }
   }
   async openPreachMode() {

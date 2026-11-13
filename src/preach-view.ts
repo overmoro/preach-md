@@ -594,7 +594,8 @@ export class PreachView extends ItemView {
 				});
 				btn.addEventListener("pointerdown", (e: PointerEvent) => {
 					e.stopPropagation();
-					el.scrollIntoView({ behavior: "smooth", block: "start" });
+					const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+					el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
 					this.closeOutline();
 					this.closePassage();
 				});

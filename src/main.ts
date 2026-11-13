@@ -52,7 +52,7 @@ export default class PreachMDPlugin extends Plugin {
 	async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
 		for (const leaf of this.app.workspace.getLeavesOfType(PREACH_VIEW_TYPE)) {
-			(leaf.view as PreachView).applyTextScale();
+			if (leaf.view instanceof PreachView) leaf.view.applyTextScale();
 		}
 	}
 
