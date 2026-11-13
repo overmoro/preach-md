@@ -1034,6 +1034,15 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.preach-timer[data-run-state="running"] {
+		animation: none;
+	}
+
+	.preach-back-pill,
+	.preach-inline-format-bar {
+		transition: none;
+	}
+
 	.preach-strip .preach-strip-seg::before {
 		transition: none;
 	}
