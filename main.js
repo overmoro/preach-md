@@ -2180,6 +2180,8 @@ var PreachView = class extends import_obsidian4.ItemView {
     this.wakeLock = null;
     // Edge-swipe suppression
     this.touchHandler = null;
+    // Set in onClose so onOpen stops carrying on after an early close
+    this.closed = false;
     // Exit confirm state
     this.exitConfirming = false;
     this.exitConfirmTimeout = null;
@@ -2242,6 +2244,8 @@ var PreachView = class extends import_obsidian4.ItemView {
       }
     });
     await this.requestWakeLock();
+    if (this.closed)
+      return;
     this.suppressEdgeSwipes();
     this.registerEvent(
       this.app.metadataCache.on("changed", (changed, data, cache) => {
@@ -2255,6 +2259,8 @@ var PreachView = class extends import_obsidian4.ItemView {
     );
     if (this.file) {
       await this.renderFile(this.file);
+      if (this.closed)
+        return;
     }
     this.preachLeaf = this.leaf;
     this.registerEvent(
@@ -2271,6 +2277,7 @@ var PreachView = class extends import_obsidian4.ItemView {
   }
   async onClose() {
     var _a, _b;
+    this.closed = true;
     this.renderGen++;
     if (this.idleTimeout !== null) {
       window.clearTimeout(this.idleTimeout);
@@ -2784,7 +2791,12 @@ var PreachView = class extends import_obsidian4.ItemView {
     try {
       if ("wakeLock" in navigator) {
         const nav = navigator;
-        this.wakeLock = await nav.wakeLock.request("screen");
+        const lock = await nav.wakeLock.request("screen");
+        if (this.closed) {
+          await lock.release();
+          return;
+        }
+        this.wakeLock = lock;
       }
     } catch (e) {
     }

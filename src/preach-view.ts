@@ -92,6 +92,9 @@ export class PreachView extends ItemView {
 	// Edge-swipe suppression
 	private touchHandler: ((e: TouchEvent) => void) | null = null;
 
+	// Set in onClose so onOpen stops carrying on after an early close
+	private closed = false;
+
 	// Exit confirm state
 	private exitConfirming = false;
 	private exitConfirmTimeout: number | null = null;
@@ -183,6 +186,7 @@ export class PreachView extends ItemView {
 			}
 		});
 		await this.requestWakeLock();
+		if (this.closed) return;
 		this.suppressEdgeSwipes();
 
 		// Registered before the first render so a re-index during it isn't missed
@@ -198,6 +202,7 @@ export class PreachView extends ItemView {
 
 		if (this.file) {
 			await this.renderFile(this.file);
+			if (this.closed) return;
 		}
 
 		// Track this leaf so pills can switch focus back to it
@@ -221,6 +226,7 @@ export class PreachView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.closed = true;
 		this.renderGen++;
 		if (this.idleTimeout !== null) {
 			window.clearTimeout(this.idleTimeout);
@@ -818,7 +824,12 @@ export class PreachView extends ItemView {
 		try {
 			if ("wakeLock" in navigator) {
 				const nav = navigator as Navigator & { wakeLock: WakeLockAPI };
-				this.wakeLock = await nav.wakeLock.request("screen");
+				const lock = await nav.wakeLock.request("screen");
+				if (this.closed) {
+					await lock.release();
+					return;
+				}
+				this.wakeLock = lock;
 			}
 		} catch {
 			// Wake lock unavailable - non-fatal
