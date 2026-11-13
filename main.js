@@ -825,8 +825,24 @@ function normaliseBook(raw) {
     return null;
   return (_a = BOOK_MAP[key]) != null ? _a : null;
 }
-var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)\s+(\d+):(\d+)(?:-(\d+)(?::(\d+))?)?/g;
-function parseReferences(text) {
+var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)(\.)?\s+(\d+):(\d+)(?:[-–](\d+)(?::(\d+))?)?/g;
+var CONTINUATION_REGEX = /[;,]\s?(\d{1,3}):(\d{1,3})(?:[-–](\d{1,3})(?::(\d{1,3}))?)?\b(?!\s?[ap]\.?m\b)/iy;
+var VERSE_ONLY_REGEX = /\bvv?(?:\.\s?|\s)?(\d{1,3})(?:[-–](\d{1,3}))?\b(?![:.]\d)/g;
+var CHAPTER_ONLY_REGEX = /^(.+?)\s+(\d{1,3})(?:\s?[-–]\s?(\d{1,3}))?$/;
+var DOTTED_EXCLUDED = ["is", "am", "mr"];
+function verseChapter(p, n) {
+  if (p.chapterEnd === p.chapter)
+    return p.chapter;
+  if (p.chapterEnd !== p.chapter + 1)
+    return null;
+  const inFirst = n >= p.verseStart;
+  const inLast = n <= p.verseEnd;
+  if (inFirst === inLast)
+    return null;
+  return inFirst ? p.chapter : p.chapterEnd;
+}
+function parseReferences(text, passages = []) {
+  var _a;
   const results = [];
   SCRIPTURE_REGEX.lastIndex = 0;
   let m;
@@ -846,10 +862,12 @@ function parseReferences(text) {
     }
     if (book === null)
       continue;
-    const chapter = parseInt(m[2], 10);
-    const verseStart = parseInt(m[3], 10);
-    const chapterEnd = m[5] ? parseInt(m[4], 10) : chapter;
-    const verseEnd = m[5] ? parseInt(m[5], 10) : m[4] ? parseInt(m[4], 10) : verseStart;
+    if (m[2] && DOTTED_EXCLUDED.includes(words[words.length - 1].toLowerCase()))
+      continue;
+    const chapter = parseInt(m[3], 10);
+    const verseStart = parseInt(m[4], 10);
+    const chapterEnd = m[6] ? parseInt(m[5], 10) : chapter;
+    const verseEnd = m[6] ? parseInt(m[6], 10) : m[5] ? parseInt(m[5], 10) : verseStart;
     results.push({
       raw: m[0].slice(offset),
       book,
@@ -860,8 +878,83 @@ function parseReferences(text) {
       index: m.index + offset,
       length: m[0].length - offset
     });
+    let pos = m.index + m[0].length;
+    for (; ; ) {
+      CONTINUATION_REGEX.lastIndex = pos;
+      const c = CONTINUATION_REGEX.exec(text);
+      if (c === null)
+        break;
+      const raw = c[0].slice(c[0].search(/\d/));
+      const cChapter = parseInt(c[1], 10);
+      const cStart = parseInt(c[2], 10);
+      results.push({
+        raw,
+        book,
+        chapter: cChapter,
+        verseStart: cStart,
+        chapterEnd: c[4] ? parseInt(c[3], 10) : cChapter,
+        verseEnd: c[4] ? parseInt(c[4], 10) : c[3] ? parseInt(c[3], 10) : cStart,
+        index: pos + c[0].length - raw.length,
+        length: raw.length
+      });
+      pos += c[0].length;
+    }
+    SCRIPTURE_REGEX.lastIndex = pos;
+  }
+  if (passages.length === 1) {
+    const passage = passages[0];
+    VERSE_ONLY_REGEX.lastIndex = 0;
+    while ((m = VERSE_ONLY_REGEX.exec(text)) !== null) {
+      const verseStart = parseInt(m[1], 10);
+      const chapter = verseChapter(passage, verseStart);
+      if (chapter === null)
+        continue;
+      const before = /((?:[123]\s?)?[A-Z][a-z]+)\.?\s*$/.exec(text.slice(0, m.index));
+      if (before && ((_a = normaliseBook(before[1])) != null ? _a : normaliseBook(`1 ${before[1]}`)))
+        continue;
+      const start = m.index;
+      const end = start + m[0].length;
+      if (results.some((r) => r.index < end && start < r.index + r.length))
+        continue;
+      results.push({
+        raw: m[0],
+        book: passage.book,
+        chapter,
+        verseStart,
+        chapterEnd: chapter,
+        verseEnd: m[2] ? parseInt(m[2], 10) : verseStart,
+        index: m.index,
+        length: m[0].length
+      });
+    }
+    results.sort((a, b) => a.index - b.index);
   }
   return results;
+}
+function notePassages(frontmatter) {
+  var _a;
+  if (typeof frontmatter !== "object" || frontmatter === null)
+    return [];
+  const value = frontmatter["passage"];
+  const entries = Array.isArray(value) ? value : [value];
+  const refs = [];
+  for (const entry of entries) {
+    if (typeof entry !== "string")
+      continue;
+    const text = ((_a = entry.replace(/^\s*\[\[|\]\]\s*$/g, "").split("|").pop()) != null ? _a : "").trim();
+    const found = parseReferences(text);
+    if (found.length > 0) {
+      refs.push(...found);
+      continue;
+    }
+    const m = CHAPTER_ONLY_REGEX.exec(text);
+    const book = m ? normaliseBook(m[1]) : null;
+    if (m === null || book === null)
+      continue;
+    const chapter = parseInt(m[2], 10);
+    refs.push({ raw: text, book, chapter, verseStart: 1, chapterEnd: m[3] ? parseInt(m[3], 10) : chapter, verseEnd: Infinity });
+  }
+  return refs;
 }
 var verseCache = /* @__PURE__ */ new Map();
 var SINGLE_CHAPTER = true;
@@ -1014,21 +1107,24 @@ async function fetchVerses(app, csbFolder, ref) {
     const map = await loadChapter(app, csbFolder, ref.book, c);
     if (!map)
       throw notFound();
+    const max = Math.max(...map.keys());
     const first = c === ref.chapter ? ref.verseStart : 1;
-    const last = c === ref.chapterEnd ? ref.verseEnd : Math.max(...map.keys());
-    if (last < first)
+    const last = c === ref.chapterEnd && ref.verseEnd !== Infinity ? ref.verseEnd : max;
+    if (first < 1 || last < first || last > max)
       throw notFound();
     for (let v = first; v <= last; v++) {
       const text = map.get(v);
-      if (text === void 0)
-        throw notFound();
-      results.push({ chapter: c, verse: v, text });
+      if (text)
+        results.push({ chapter: c, verse: v, text });
     }
   }
+  if (results.length === 0)
+    throw notFound();
   return results;
 }
 var ScriptureExpander = class {
   constructor(app, csbFolder, component, sourcePath) {
+    this.passages = [];
     /** Track which refs are currently expanded: span element -> expanded div. */
     this.expanded = /* @__PURE__ */ new Map();
     this.app = app;
@@ -1041,6 +1137,9 @@ var ScriptureExpander = class {
   }
   updateSourcePath(sourcePath) {
     this.sourcePath = sourcePath;
+  }
+  updatePassages(passages) {
+    this.passages = passages;
   }
   /**
    * Walk the rendered DOM, find text nodes outside special blocks,
@@ -1060,7 +1159,7 @@ var ScriptureExpander = class {
     }
     if (node.nodeType === Node.TEXT_NODE) {
       const text = (_a = node.textContent) != null ? _a : "";
-      const refs = parseReferences(text);
+      const refs = parseReferences(text, this.passages);
       if (refs.length === 0)
         return;
       const frag = createFragment();
@@ -1121,24 +1220,7 @@ var ScriptureExpander = class {
       const verses = await fetchVerses(this.app, this.csbFolder, ref);
       expandEl.empty();
       expandEl.className = "preach-scripture-expand";
-      const passageEl = expandEl.createSpan({ cls: "preach-scripture-passage" });
-      let prevChapter = ref.chapter;
-      for (const { chapter, verse, text } of verses) {
-        const label = chapter !== prevChapter ? `${chapter}:${verse}` : String(verse);
-        prevChapter = chapter;
-        passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: label });
-        const tmp = createDiv();
-        await import_obsidian2.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
-        const nodes = Array.from(tmp.childNodes);
-        for (const node of nodes) {
-          if (node.instanceOf(HTMLElement) && node.tagName === "P") {
-            passageEl.append(...Array.from(node.childNodes));
-          } else {
-            passageEl.append(node);
-          }
-        }
-        passageEl.appendText(" ");
-      }
+      await this.renderVerses(expandEl, ref.chapter, verses);
       expandEl.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         expandEl.remove();
@@ -1156,6 +1238,43 @@ var ScriptureExpander = class {
         this.expanded.delete(span2);
         span2.classList.remove("preach-scripture-ref--open");
       });
+    }
+  }
+  /**
+   * Render verses as one flowing paragraph into el.
+   * Each verse gets an inline superscript number; no block breaks between verses.
+   */
+  async renderVerses(el, firstChapter, verses) {
+    const passageEl = el.createSpan({ cls: "preach-scripture-passage" });
+    let prevChapter = firstChapter;
+    for (const { chapter, verse, text } of verses) {
+      const label = chapter !== prevChapter ? `${chapter}:${verse}` : String(verse);
+      prevChapter = chapter;
+      passageEl.createEl("sup", { cls: "preach-scripture-verse-num", text: label });
+      const tmp = createDiv();
+      await import_obsidian2.MarkdownRenderer.render(this.app, text, tmp, this.sourcePath, this.component);
+      const nodes = Array.from(tmp.childNodes);
+      for (const node of nodes) {
+        if (node.instanceOf(HTMLElement) && node.tagName === "P") {
+          passageEl.append(...Array.from(node.childNodes));
+        } else {
+          passageEl.append(node);
+        }
+      }
+      passageEl.appendText(" ");
+    }
+  }
+  async renderPassage(el, passages) {
+    el.empty();
+    for (const ref of passages) {
+      el.createDiv({ cls: "preach-passage-ref", text: ref.raw });
+      const textEl = el.createDiv({ cls: "preach-passage-text" });
+      try {
+        await this.renderVerses(textEl, ref.chapter, await fetchVerses(this.app, this.csbFolder, ref));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : `Could not load ${ref.raw}`;
+        textEl.createSpan({ cls: "preach-scripture-error-text", text: msg });
+      }
     }
   }
   /** Collapse all expanded passages (call when view re-renders). */
@@ -1677,6 +1796,8 @@ var PreachView = class extends import_obsidian4.ItemView {
     this.preachLeaf = null;
     this.editPills = /* @__PURE__ */ new Map();
     this.editFormatBars = /* @__PURE__ */ new Map();
+    this.passages = [];
+    this.passageBuilt = false;
     // Idle-fade timeout handle
     this.idleTimeout = null;
     // Wake lock
@@ -1834,7 +1955,8 @@ var PreachView = class extends import_obsidian4.ItemView {
     this.timerEl = root.createDiv({ cls: "preach-timer-corner" });
     this.timer = new PreachTimer(this.timerEl, this.timerThresholds());
     this.bottomBtns = root.createDiv({ cls: "preach-bottom-btns" });
-    this.outlineBtn = this.bottomBtns.createEl("button", {
+    const leftGroup = this.bottomBtns.createDiv({ cls: "preach-bottom-left" });
+    this.outlineBtn = leftGroup.createEl("button", {
       cls: "preach-corner-btn preach-corner-btn--outline",
       attr: { "aria-label": "Outline", title: "Outline" }
     });
@@ -1848,6 +1970,21 @@ var PreachView = class extends import_obsidian4.ItemView {
       e.stopPropagation();
       this.resetIdleTimer();
       this.toggleOutline();
+    });
+    this.passageBtn = leftGroup.createEl("button", {
+      cls: "preach-corner-btn",
+      attr: { "aria-label": "Show passage", title: "Passage" }
+    });
+    const passageSvg = this.passageBtn.createSvg("svg", {
+      attr: { xmlns: "http://www.w3.org/2000/svg", width: "20", height: "20", viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", "stroke-width": "2", "stroke-linecap": "round", "stroke-linejoin": "round" }
+    });
+    passageSvg.createSvg("path", { attr: { d: "M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" } });
+    passageSvg.createSvg("path", { attr: { d: "M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" } });
+    this.passageBtn.toggle(false);
+    this.passageBtn.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      this.resetIdleTimer();
+      this.togglePassage();
     });
     const sizeGroup = this.bottomBtns.createDiv({ cls: "preach-bottom-size" });
     for (const [label, aria, step] of [["A-", "Smaller text", -TEXT_SCALE_STEP], ["A+", "Larger text", TEXT_SCALE_STEP]]) {
@@ -1900,6 +2037,12 @@ var PreachView = class extends import_obsidian4.ItemView {
     this.scrollEl.addEventListener("pointerdown", () => {
       this.resetIdleTimer();
     });
+    this.passageEl = root.createDiv({
+      cls: "preach-passage-overlay preach-passage-overlay--hidden"
+    });
+    this.passageBodyEl = this.passageEl.createDiv({ cls: "preach-passage-body" });
+    this.passageEl.addEventListener("click", () => this.closePassage());
+    this.passageEl.addEventListener("scroll", () => this.resetIdleTimer());
     this.overlayEl = root.createDiv({
       cls: "preach-outline-overlay preach-outline-overlay--hidden"
     });
@@ -1960,6 +2103,7 @@ var PreachView = class extends import_obsidian4.ItemView {
   }
   // Render into the scroll area, block by block when a consistent snapshot exists
   async render(file, text, snapshot, gen) {
+    var _a;
     const scrollTop = this.savedScrollTop;
     this.scriptureExpander.collapseAll();
     this.scrollEl.empty();
@@ -1991,6 +2135,14 @@ var PreachView = class extends import_obsidian4.ItemView {
         return;
     }
     this.scriptureExpander.updateSourcePath(file.path);
+    const passages = notePassages((_a = this.app.metadataCache.getFileCache(file)) == null ? void 0 : _a.frontmatter);
+    if (JSON.stringify(passages) !== JSON.stringify(this.passages)) {
+      this.closePassage();
+      this.passageBuilt = false;
+    }
+    this.passages = passages;
+    this.passageBtn.toggle(passages.length > 0);
+    this.scriptureExpander.updatePassages(passages);
     this.scriptureExpander.processElement(body);
     this.tagRenderedHeadings(body, text);
     window.requestAnimationFrame(() => {
@@ -2045,6 +2197,7 @@ var PreachView = class extends import_obsidian4.ItemView {
           e.stopPropagation();
           el.scrollIntoView({ behavior: "smooth", block: "start" });
           this.closeOutline();
+          this.closePassage();
         });
       });
     }
@@ -2052,6 +2205,22 @@ var PreachView = class extends import_obsidian4.ItemView {
   }
   closeOutline() {
     this.overlayEl.classList.add("preach-outline-overlay--hidden");
+  }
+  // Passage overlay controls
+  togglePassage() {
+    if (!this.passageEl.classList.contains("preach-passage-overlay--hidden")) {
+      this.closePassage();
+      return;
+    }
+    if (!this.passageBuilt) {
+      this.passageBuilt = true;
+      void this.scriptureExpander.renderPassage(this.passageBodyEl, this.passages);
+    }
+    this.passageEl.classList.remove("preach-passage-overlay--hidden");
+  }
+  closePassage() {
+    this.passageEl.classList.add("preach-passage-overlay--hidden");
+    this.resetIdleTimer();
   }
   // Exit two-step confirmation
   handleExit() {

@@ -297,6 +297,14 @@
 	pointer-events: all;
 }
 
+/* Left-side group: outline + passage buttons */
+.preach-bottom-left {
+	display: flex;
+	align-items: flex-end;
+	gap: 4px;
+	pointer-events: all;
+}
+
 /* Right-side group: edit button + exit wrap side by side */
 .preach-bottom-right {
 	display: flex;
@@ -498,6 +506,53 @@
 
 .preach-exit-chip--visible {
 	opacity: 1;
+}
+
+/* ------------------------------------------------------------------ */
+/* Passage overlay                                                      */
+/* ------------------------------------------------------------------ */
+
+.preach-passage-overlay {
+	position: absolute;
+	inset: 0;
+	z-index: 15;
+	background: var(--preach-bg);
+	overflow-y: auto;
+	-webkit-overflow-scrolling: touch;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.preach-passage-overlay--hidden {
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.preach-passage-body {
+	max-width: var(--preach-max-width);
+	margin: 0 auto;
+	padding: var(--preach-content-padding);
+	font-family: var(--preach-font-family);
+	font-size: calc(var(--preach-font-size) * 1.15);
+	line-height: 1.9;
+	color: var(--preach-text);
+}
+
+.preach-passage-ref {
+	font-size: 0.55em;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--preach-muted);
+	margin: 0 0 0.6em;
+}
+
+.preach-passage-text {
+	margin-bottom: 2em;
+}
+
+.preach-passage-overlay .preach-scripture-verse-num {
+	color: var(--preach-muted);
+	font-size: 0.5em;
 }
 
 /* ------------------------------------------------------------------ */
