@@ -223,6 +223,8 @@ test("a cross-chapter range does not swallow the text after it", () => {
 	);
 });
 
+const rowsOf = async (...args) => (await fetchVerses(...args)).verses;
+
 /** Builds a minimal vault: path -> file content, enough for fetchVerses. */
 function fakeApp(files) {
 	const log = [];
@@ -262,11 +264,11 @@ test("a single-chapter book has no numbered path for any other chapter", async (
 	const numbered = fakeApp({ "J1/65 - Jude/Jude.md": chapterFile(1, 5) });
 	const plain = fakeApp({ "J2/Jude/Jude 1.md": chapterFile(1, 5) });
 	const jude = (over) => ref({ book: "Jude", chapter: 1, verseStart: 3, chapterEnd: 1, verseEnd: 3, raw: "Jude", ...over });
-	assert.deepEqual(flat(await fetchVerses(numbered, "J1", jude({}))), ["1:3=c1v3 text"]);
-	assert.deepEqual(flat(await fetchVerses(plain, "J2", jude({}))), ["1:3=c1v3 text"]);
+	assert.deepEqual(flat(await rowsOf(numbered, "J1", jude({}))), ["1:3=c1v3 text"]);
+	assert.deepEqual(flat(await rowsOf(plain, "J2", jude({}))), ["1:3=c1v3 text"]);
 	for (const [app, dir] of [[numbered, "J1"], [plain, "J2"]]) {
-		await assert.rejects(fetchVerses(app, dir, jude({ chapter: 2, chapterEnd: 2, verseStart: 1, verseEnd: 1 })), /Passage not found/);
-		await assert.rejects(fetchVerses(app, dir, jude({ chapterEnd: 2, verseEnd: 1 })), /Passage not found/);
+		await assert.rejects(rowsOf(app, dir, jude({ chapter: 2, chapterEnd: 2, verseStart: 1, verseEnd: 1 })), /Passage not found/);
+		await assert.rejects(rowsOf(app, dir, jude({ chapterEnd: 2, verseEnd: 1 })), /Passage not found/);
 	}
 });
 
@@ -275,7 +277,7 @@ test("a two-chapter range reads to the end of the first chapter then from verse 
 		"B1/John/John 3.md": chapterFile(3, 4),
 		"B1/John/John 4.md": chapterFile(4, 5),
 	});
-	const rows = await fetchVerses(app, "B1", ref({ verseStart: 3, chapterEnd: 4, verseEnd: 2 }));
+	const rows = await rowsOf(app, "B1", ref({ verseStart: 3, chapterEnd: 4, verseEnd: 2 }));
 	assert.deepEqual(flat(rows), [
 		"3:3=c3v3 text", "3:4=c3v4 text", "4:1=c4v1 text", "4:2=c4v2 text",
 	]);
@@ -287,7 +289,7 @@ test("a range over three chapters includes the whole middle chapter", async () =
 		"B2/Genesis/Gen 2.md": chapterFile(2, 2),
 		"B2/Genesis/Gen 3.md": chapterFile(3, 4),
 	});
-	const rows = await fetchVerses(
+	const rows = await rowsOf(
 		app,
 		"B2",
 		ref({ book: "Genesis", chapter: 1, verseStart: 2, chapterEnd: 3, verseEnd: 1 }),
@@ -300,7 +302,7 @@ test("cross-chapter ranges read the numbered vault layout", async () => {
 		"B3/43 - John/John-03.md": chapterFile(3, 2),
 		"B3/43 - John/John-04.md": chapterFile(4, 2),
 	});
-	const rows = await fetchVerses(app, "B3", ref({ verseStart: 2, chapterEnd: 4, verseEnd: 1 }));
+	const rows = await rowsOf(app, "B3", ref({ verseStart: 2, chapterEnd: 4, verseEnd: 1 }));
 	assert.deepEqual(rows.map((r) => `${r.chapter}:${r.verse}`), ["3:2", "4:1"]);
 });
 
@@ -319,7 +321,7 @@ test("malformed spans fail with the passage-not-found message", async () => {
 		"start verse past end of chapter": ref({ verseStart: 5, chapterEnd: 4, verseEnd: 1 }),
 	};
 	for (const [name, r] of Object.entries(cases)) {
-		await assert.rejects(fetchVerses(app, "B4", { ...r, raw: "John X" }), /^Error: Passage not found: John X$/, name);
+		await assert.rejects(rowsOf(app, "B4", { ...r, raw: "John X" }), /^Error: Passage not found: John X$/, name);
 	}
 });
 
@@ -329,7 +331,7 @@ test("a missing middle chapter fails the whole range", async () => {
 		"B5/John/John 5.md": chapterFile(5, 2),
 	});
 	await assert.rejects(
-		fetchVerses(app, "B5", ref({ chapterEnd: 5, verseEnd: 1 })),
+		rowsOf(app, "B5", ref({ chapterEnd: 5, verseEnd: 1 })),
 		/Passage not found/,
 	);
 });
@@ -341,8 +343,8 @@ test("every chapter read is cached", async () => {
 	const read = app.vault.read;
 	app.vault.read = async (f) => (reads++, read(f));
 	const r = ref({ chapterEnd: 4, verseEnd: 1 });
-	await fetchVerses(app, "B6", r);
-	await fetchVerses(app, "B6", r);
+	await rowsOf(app, "B6", r);
+	await rowsOf(app, "B6", r);
 	assert.equal(reads, 2);
 });
 
@@ -581,16 +583,16 @@ test("verses omitted inside a range are skipped, at the edges they still fail", 
 	});
 	const mark = (raw, verseStart, chapterEnd, verseEnd) =>
 		({ raw, book: "Mark", chapter: 9, verseStart, chapterEnd, verseEnd });
-	assert.deepEqual(keys(await fetchVerses(app, "B7", mark("Mark 9:43-48", 43, 9, 48))), ["9:43", "9:45", "9:47", "9:48"]);
-	assert.deepEqual(keys(await fetchVerses(app, "B7", mark("Mark 9:49-10:1", 49, 10, 1))), ["9:49", "9:50", "10:1"]);
-	assert.deepEqual(keys(await fetchVerses(app, "B7", mark("Mark 9:44-46", 44, 9, 46))), ["9:45"]);
+	assert.deepEqual(keys(await rowsOf(app, "B7", mark("Mark 9:43-48", 43, 9, 48))), ["9:43", "9:45", "9:47", "9:48"]);
+	assert.deepEqual(keys(await rowsOf(app, "B7", mark("Mark 9:49-10:1", 49, 10, 1))), ["9:49", "9:50", "10:1"]);
+	assert.deepEqual(keys(await rowsOf(app, "B7", mark("Mark 9:44-46", 44, 9, 46))), ["9:45"]);
 	assert.deepEqual(
-		keys(await fetchVerses(app, "B7", ref({ book: "Matthew", chapter: 17, verseStart: 14, chapterEnd: 17, verseEnd: 21 }))),
+		keys(await rowsOf(app, "B7", ref({ book: "Matthew", chapter: 17, verseStart: 14, chapterEnd: 17, verseEnd: 21 }))),
 		range(14, 20).map((v) => `17:${v}`),
 	);
-	await assert.rejects(fetchVerses(app, "B7", mark("Mark 9:44", 44, 9, 44)), /^Error: Passage not found: Mark 9:44$/);
-	await assert.rejects(fetchVerses(app, "B7", mark("Mark 9:0-2", 0, 9, 2)), /Passage not found/);
-	await assert.rejects(fetchVerses(app, "B7", mark("Mark 9:48-51", 48, 9, 51)), /Passage not found/);
+	await assert.rejects(rowsOf(app, "B7", mark("Mark 9:44", 44, 9, 44)), /^Error: Passage not found: Mark 9:44$/);
+	await assert.rejects(rowsOf(app, "B7", mark("Mark 9:0-2", 0, 9, 2)), /Passage not found/);
+	await assert.rejects(rowsOf(app, "B7", mark("Mark 9:48-51", 48, 9, 51)), /Passage not found/);
 });
 
 test("verseEnd Infinity reads to the end of the last chapter", async () => {
@@ -600,12 +602,12 @@ test("verseEnd Infinity reads to the end of the last chapter", async () => {
 		"B8/Matthew/Matt 6.md": gappyChapter(6, range(1, 2)),
 		"B8/Matthew/Matt 7.md": gappyChapter(7, range(1, 2)),
 	});
-	const amos = await fetchVerses(app, "B8", ref({ book: "Amos", chapter: 4, verseStart: 1, chapterEnd: 4, verseEnd: Infinity }));
+	const amos = await rowsOf(app, "B8", ref({ book: "Amos", chapter: 4, verseStart: 1, chapterEnd: 4, verseEnd: Infinity }));
 	assert.equal(amos.length, 13);
-	const matt = await fetchVerses(app, "B8", ref({ book: "Matthew", chapter: 5, verseStart: 1, chapterEnd: 7, verseEnd: Infinity }));
+	const matt = await rowsOf(app, "B8", ref({ book: "Matthew", chapter: 5, verseStart: 1, chapterEnd: 7, verseEnd: Infinity }));
 	assert.deepEqual(keys(matt), ["5:1", "5:2", "5:3", "6:1", "6:2", "7:1", "7:2"]);
 	await assert.rejects(
-		fetchVerses(app, "B8", ref({ book: "Amos", chapter: 9, verseStart: 1, chapterEnd: 9, verseEnd: Infinity })),
+		rowsOf(app, "B8", ref({ book: "Amos", chapter: 9, verseStart: 1, chapterEnd: 9, verseEnd: Infinity })),
 		/Passage not found/,
 	);
 });
@@ -663,25 +665,28 @@ test("parseBibleText refuses markup in verse text and accepts typography", () =>
 test("the vault folder wins when it holds the chapter", async () => {
 	setBibleFile("dl3/bsb.txt");
 	const app = fakeApp({ "B7/John/John 3.md": chapterFile(3, 3), "dl3/bsb.txt": bibleText({ john: true }) });
-	const rows = await fetchVerses(app, "B7", ref({ verseStart: 2, verseEnd: 3 }));
+	const rows = await rowsOf(app, "B7", ref({ verseStart: 2, verseEnd: 3 }));
 	assert.deepEqual(flat(rows), ["3:2=c3v2 text", "3:3=c3v3 text"]);
+	assert.equal((await fetchVerses(app, "B7", ref({ verseStart: 2, verseEnd: 3 }))).source, "vault");
 });
 
 test("the download serves a book the vault lacks", async () => {
 	setBibleFile("dl4/bsb.txt");
 	const app = fakeApp({ "dl4/bsb.txt": bibleText({ john: true }) });
-	const rows = await fetchVerses(app, "B8", ref({ verseStart: 1, verseEnd: 2 }));
+	const rows = await rowsOf(app, "B8", ref({ verseStart: 1, verseEnd: 2 }));
 	assert.deepEqual(flat(rows), ["3:1=b3v1", "3:2=b3v2"]);
+	assert.equal((await fetchVerses(app, "B8", ref({ verseStart: 1, verseEnd: 2 }))).source, "bsb");
 });
 
 test("a passage the vault can only half serve comes wholly from the download", async () => {
 	setBibleFile("dl5/bsb.txt");
 	const app = fakeApp({ "B9/John/John 3.md": chapterFile(3, 3), "dl5/bsb.txt": bibleText({ john: true }) });
-	const rows = await fetchVerses(app, "B9", ref({ verseStart: 2, chapterEnd: 4, verseEnd: 1 }));
+	const rows = await rowsOf(app, "B9", ref({ verseStart: 2, chapterEnd: 4, verseEnd: 1 }));
 	assert.equal(rows.length, 27, "3:2 to 3:27, then 4:1");
 	assert.deepEqual(flat(rows).slice(0, 2), ["3:2=b3v2", "3:3=b3v3"]);
 	assert.ok(flat(rows).every((r) => /=b\d/.test(r)), "no vault rows mixed in");
 	assert.equal(flat(rows).at(-1), "4:1=b4v1");
+	assert.equal((await fetchVerses(app, "B9", ref({ verseStart: 2, chapterEnd: 4, verseEnd: 1 }))).source, "bsb");
 });
 
 test("a slow failed read can't clear a newer download's memo", async () => {
@@ -707,7 +712,7 @@ test("a slow failed read can't clear a newer download's memo", async () => {
 test("a damaged download plus a vault miss is not found", async () => {
 	setBibleFile("dl6/bsb.txt");
 	const app = fakeApp({ "dl6/bsb.txt": bibleText({ john: true }).slice(0, -8) });
-	await assert.rejects(fetchVerses(app, "B10", { ...ref(), raw: "John 3:1" }), /^Error: Passage not found: John 3:1$/);
+	await assert.rejects(rowsOf(app, "B10", { ...ref(), raw: "John 3:1" }), /^Error: Passage not found: John 3:1$/);
 });
 
 test("bibleStatus reports absent, ready and damaged", async () => {
@@ -746,7 +751,7 @@ test("downloadBible writes the part file, removes the old one, then renames", as
 	setBibleFile("dl9/bsb.txt");
 	const files = { "dl9/bsb.txt": "old" };
 	const app = fakeApp(files);
-	await assert.rejects(fetchVerses(app, "B11", { ...ref(), raw: "John 3:1" }), /Passage not found/);
+	await assert.rejects(rowsOf(app, "B11", { ...ref(), raw: "John 3:1" }), /Passage not found/);
 	const real = net.requestUrl;
 	net.requestUrl = async () => ({ text: bibleText({ john: true }) });
 	try {
@@ -756,15 +761,15 @@ test("downloadBible writes the part file, removes the old one, then renames", as
 	}
 	assert.deepEqual(app.log, ["write dl9/bsb.txt.part", "remove dl9/bsb.txt", "rename dl9/bsb.txt.part -> dl9/bsb.txt"]);
 	assert.equal(await bibleStatus(app), "ready");
-	assert.deepEqual(flat(await fetchVerses(app, "B11", ref({ verseStart: 1, verseEnd: 1 }))), ["3:1=b3v1"]);
+	assert.deepEqual(flat(await rowsOf(app, "B11", ref({ verseStart: 1, verseEnd: 1 }))), ["3:1=b3v1"]);
 });
 
 test("removeBible deletes the file and any part file", async () => {
 	setBibleFile("dl10/bsb.txt");
 	const app = fakeApp({ "dl10/bsb.txt": bibleText({ john: true }), "dl10/bsb.txt.part": "half" });
-	assert.equal((await fetchVerses(app, "B12", ref({ verseStart: 1, verseEnd: 1 }))).length, 1);
+	assert.equal((await rowsOf(app, "B12", ref({ verseStart: 1, verseEnd: 1 }))).length, 1);
 	await removeBible(app);
-	await assert.rejects(fetchVerses(app, "B12", { ...ref(), raw: "John 3:1" }), /Passage not found/);
+	await assert.rejects(rowsOf(app, "B12", { ...ref(), raw: "John 3:1" }), /Passage not found/);
 	assert.deepEqual(app.log, ["remove dl10/bsb.txt", "remove dl10/bsb.txt.part"]);
 	assert.equal(await bibleStatus(app), "absent");
 });
@@ -773,14 +778,14 @@ test("a failed read isn't remembered: the file appearing later is picked up", as
 	setBibleFile("dl11/bsb.txt");
 	const files = {};
 	const app = fakeApp(files);
-	await assert.rejects(fetchVerses(app, "B13", { ...ref(), raw: "John 3:1" }), /Passage not found/);
+	await assert.rejects(rowsOf(app, "B13", { ...ref(), raw: "John 3:1" }), /Passage not found/);
 	files["dl11/bsb.txt"] = bibleText({ john: true });
 	assert.equal(await bibleStatus(app), "ready");
-	assert.deepEqual(flat(await fetchVerses(app, "B13", ref({ verseStart: 1, verseEnd: 1 }))), ["3:1=b3v1"]);
+	assert.deepEqual(flat(await rowsOf(app, "B13", ref({ verseStart: 1, verseEnd: 1 }))), ["3:1=b3v1"]);
 });
 
 test("a leftover part file is ignored by lookups", async () => {
 	setBibleFile("dl12/bsb.txt");
 	const app = fakeApp({ "dl12/bsb.txt.part": bibleText({ john: true }) });
-	await assert.rejects(fetchVerses(app, "B14", { ...ref(), raw: "John 3:1" }), /Passage not found/);
+	await assert.rejects(rowsOf(app, "B14", { ...ref(), raw: "John 3:1" }), /Passage not found/);
 });
