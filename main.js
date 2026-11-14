@@ -1572,6 +1572,7 @@ var SectionStrip = class {
     this.timeline = false;
     this.lastKey = "";
     this.downTarget = null;
+    this.pendingJump = 0;
     this.nav = parent.createEl("nav", {
       cls: "preach-strip preach-strip--hidden",
       attr: { "aria-label": "Sections", "data-ignore-swipe": "true" }
@@ -1583,6 +1584,7 @@ var SectionStrip = class {
     this.downTarget = target;
   }
   build(headings, pacing) {
+    window.clearTimeout(this.pendingJump);
     this.playhead.remove();
     this.nav.empty();
     this.headings = [];
@@ -1616,10 +1618,11 @@ var SectionStrip = class {
         if (e.detail !== 0 && !seg.contains(this.downTarget))
           return;
         (_a2 = this.onJump) == null ? void 0 : _a2.call(this);
+        window.clearTimeout(this.pendingJump);
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
         const go = () => heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
         if (unfoldCallouts(heading))
-          window.setTimeout(go, UNFOLD_MS + 100);
+          this.pendingJump = window.setTimeout(go, UNFOLD_MS + 100);
         else
           go();
       });

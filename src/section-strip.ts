@@ -130,6 +130,7 @@ export class SectionStrip {
 	private timeline = false;
 	private lastKey = "";
 	private downTarget: EventTarget | null = null;
+	private pendingJump = 0;
 
 	constructor(
 		parent: HTMLElement,
@@ -150,6 +151,7 @@ export class SectionStrip {
 	}
 
 	build(headings: HTMLElement[], pacing: boolean): void {
+		window.clearTimeout(this.pendingJump);
 		this.playhead.remove();
 		this.nav.empty();
 		this.headings = [];
@@ -182,10 +184,11 @@ export class SectionStrip {
 				// detail 0: activated without a pointer, e.g. the keyboard
 				if (e.detail !== 0 && !seg.contains(this.downTarget as Node | null)) return;
 				this.onJump?.();
+				window.clearTimeout(this.pendingJump);
 				const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 				const go = () => heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
 				// Obsidian toggles on a 0ms timeout, then animates height for 100ms
-				if (unfoldCallouts(heading)) window.setTimeout(go, UNFOLD_MS + 100);
+				if (unfoldCallouts(heading)) this.pendingJump = window.setTimeout(go, UNFOLD_MS + 100);
 				else go();
 			});
 			this.segs.push(seg);
