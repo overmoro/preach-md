@@ -80,40 +80,32 @@ var BOOK_MAP = {
   "1sam": "1 Samuel",
   "1sa": "1 Samuel",
   "1s": "1 Samuel",
-  "i samuel": "1 Samuel",
-  "i sam": "1 Samuel",
   // 2 Samuel
   "2 samuel": "2 Samuel",
   "2samuel": "2 Samuel",
   "2sam": "2 Samuel",
   "2sa": "2 Samuel",
-  "ii samuel": "2 Samuel",
-  "ii sam": "2 Samuel",
   // 1 Kings
   "1 kings": "1 Kings",
   "1kings": "1 Kings",
   "1kgs": "1 Kings",
   "1ki": "1 Kings",
   "1kg": "1 Kings",
-  "i kings": "1 Kings",
   // 2 Kings
   "2 kings": "2 Kings",
   "2kings": "2 Kings",
   "2kgs": "2 Kings",
   "2ki": "2 Kings",
-  "ii kings": "2 Kings",
   // 1 Chronicles
   "1 chronicles": "1 Chronicles",
   "1chronicles": "1 Chronicles",
   "1chr": "1 Chronicles",
   "1ch": "1 Chronicles",
-  "i chronicles": "1 Chronicles",
   // 2 Chronicles
   "2 chronicles": "2 Chronicles",
   "2chronicles": "2 Chronicles",
   "2chr": "2 Chronicles",
   "2ch": "2 Chronicles",
-  "ii chronicles": "2 Chronicles",
   // Ezra
   ezra: "Ezra",
   ezr: "Ezra",
@@ -258,16 +250,12 @@ var BOOK_MAP = {
   "1corinthians": "1 Corinthians",
   "1cor": "1 Corinthians",
   "1co": "1 Corinthians",
-  "i corinthians": "1 Corinthians",
-  "i cor": "1 Corinthians",
   "1 cor": "1 Corinthians",
   // 2 Corinthians
   "2 corinthians": "2 Corinthians",
   "2corinthians": "2 Corinthians",
   "2cor": "2 Corinthians",
   "2co": "2 Corinthians",
-  "ii corinthians": "2 Corinthians",
-  "ii cor": "2 Corinthians",
   "2 cor": "2 Corinthians",
   // Galatians
   galatians: "Galatians",
@@ -289,28 +277,24 @@ var BOOK_MAP = {
   "1thessalonians": "1 Thessalonians",
   "1thess": "1 Thessalonians",
   "1th": "1 Thessalonians",
-  "i thessalonians": "1 Thessalonians",
   "1 thess": "1 Thessalonians",
   // 2 Thessalonians
   "2 thessalonians": "2 Thessalonians",
   "2thessalonians": "2 Thessalonians",
   "2thess": "2 Thessalonians",
   "2th": "2 Thessalonians",
-  "ii thessalonians": "2 Thessalonians",
   "2 thess": "2 Thessalonians",
   // 1 Timothy
   "1 timothy": "1 Timothy",
   "1timothy": "1 Timothy",
   "1tim": "1 Timothy",
   "1ti": "1 Timothy",
-  "i timothy": "1 Timothy",
   "1 tim": "1 Timothy",
   // 2 Timothy
   "2 timothy": "2 Timothy",
   "2timothy": "2 Timothy",
   "2tim": "2 Timothy",
   "2ti": "2 Timothy",
-  "ii timothy": "2 Timothy",
   "2 tim": "2 Timothy",
   // Titus
   titus: "Titus",
@@ -333,7 +317,6 @@ var BOOK_MAP = {
   "1pet": "1 Peter",
   "1pe": "1 Peter",
   "1pt": "1 Peter",
-  "i peter": "1 Peter",
   "1 pet": "1 Peter",
   // 2 Peter
   "2 peter": "2 Peter",
@@ -341,7 +324,6 @@ var BOOK_MAP = {
   "2pet": "2 Peter",
   "2pe": "2 Peter",
   "2pt": "2 Peter",
-  "ii peter": "2 Peter",
   "2 pet": "2 Peter",
   // 1 John
   "1 john": "1 John",
@@ -350,21 +332,18 @@ var BOOK_MAP = {
   "1jn": "1 John",
   "1jhn": "1 John",
   "1jo": "1 John",
-  "i john": "1 John",
   // 2 John
   "2 john": "2 John",
   "2john": "2 John",
   "2joh": "2 John",
   "2jn": "2 John",
   "2jhn": "2 John",
-  "ii john": "2 John",
   // 3 John
   "3 john": "3 John",
   "3john": "3 John",
   "3joh": "3 John",
   "3jn": "3 John",
   "3jhn": "3 John",
-  "iii john": "3 John",
   // Jude
   jude: "Jude",
   jud: "Jude",
@@ -376,14 +355,14 @@ var BOOK_MAP = {
 };
 function normaliseBook(raw) {
   var _a;
-  let key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+  let key = raw.trim().toLowerCase().replace(/\s+/g, " ").replace(/^(i{1,3}) /, (_, r) => `${r.length} `);
   if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key))
     key = key.replace(/^([123]) /, "$1");
   if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key))
     return null;
   return (_a = BOOK_MAP[key]) != null ? _a : null;
 }
-var SCRIPTURE_REGEX = /\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)(\.)?\s+(\d+):(\d+)(?:[-–](\d+)(?::(\d+))?)?/g;
+var SCRIPTURE_REGEX = /\b((?:[123]\s*|I{1,3}\s+)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)(\.)?\s+(\d+):(\d+)(?:[-–](\d+)(?::(\d+))?)?/g;
 var CONTINUATION_REGEX = /[;,]\s?(\d{1,3}):(\d{1,3})(?:[-–](\d{1,3})(?::(\d{1,3}))?)?\b(?!\s?[ap]\.?m\b)/iy;
 var VERSE_ONLY_REGEX = /\bvv?(?:\.\s?|\s)?(\d{1,3})(?:[-–](\d{1,3}))?\b(?![:.]\d)/g;
 var CHAPTER_ONLY_REGEX = /^(.+?)\s+(\d{1,3})(?:\s?[-–]\s?(\d{1,3}))?$/;
@@ -400,17 +379,19 @@ function verseChapter(p, n) {
   return inFirst ? p.chapter : p.chapterEnd;
 }
 function parseReferences(text, passages = []) {
-  var _a;
+  var _a, _b;
   const results = [];
   SCRIPTURE_REGEX.lastIndex = 0;
   let m;
   while ((m = SCRIPTURE_REGEX.exec(text)) !== null) {
     const rawBook = m[1];
-    const words = rawBook.split(" ");
+    const words = (_a = rawBook.match(/\S+\s*/g)) != null ? _a : [];
     let book = null;
     let offset = 0;
     for (let w = 0; w < words.length; w++) {
-      const candidate = words.slice(w).join(" ");
+      if (w === 1 && /^(?:[123]|I{2,3})\s/.test(rawBook))
+        continue;
+      const candidate = words.slice(w).join("");
       const resolved = normaliseBook(candidate);
       if (resolved !== null) {
         book = resolved;
@@ -420,7 +401,7 @@ function parseReferences(text, passages = []) {
     }
     if (book === null)
       continue;
-    if (m[2] && DOTTED_EXCLUDED.includes(words[words.length - 1].toLowerCase()))
+    if (m[2] && DOTTED_EXCLUDED.includes(words[words.length - 1].trim().toLowerCase()))
       continue;
     const chapter = parseInt(m[3], 10);
     const verseStart = parseInt(m[4], 10);
@@ -468,7 +449,7 @@ function parseReferences(text, passages = []) {
       if (chapter === null)
         continue;
       const before = /([A-Z][a-z]+)\.?\s*$/.exec(text.slice(Math.max(0, m.index - 32), m.index));
-      if (before && ((_a = normaliseBook(before[1])) != null ? _a : normaliseBook(`1 ${before[1]}`)))
+      if (before && ((_b = normaliseBook(before[1])) != null ? _b : normaliseBook(`1 ${before[1]}`)))
         continue;
       const start = m.index;
       const end = start + m[0].length;
