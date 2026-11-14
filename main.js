@@ -348,6 +348,7 @@ var BOOK_MAP = {
   "1john": "1 John",
   "1joh": "1 John",
   "1jn": "1 John",
+  "1jhn": "1 John",
   "1jo": "1 John",
   "i john": "1 John",
   // 2 John
@@ -355,12 +356,14 @@ var BOOK_MAP = {
   "2john": "2 John",
   "2joh": "2 John",
   "2jn": "2 John",
+  "2jhn": "2 John",
   "ii john": "2 John",
   // 3 John
   "3 john": "3 John",
   "3john": "3 John",
   "3joh": "3 John",
   "3jn": "3 John",
+  "3jhn": "3 John",
   "iii john": "3 John",
   // Jude
   jude: "Jude",
@@ -373,7 +376,9 @@ var BOOK_MAP = {
 };
 function normaliseBook(raw) {
   var _a;
-  const key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+  let key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key))
+    key = key.replace(/^([123]) /, "$1");
   if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key))
     return null;
   return (_a = BOOK_MAP[key]) != null ? _a : null;
@@ -462,7 +467,7 @@ function parseReferences(text, passages = []) {
       const chapter = verseChapter(passage, verseStart);
       if (chapter === null)
         continue;
-      const before = /((?:[123]\s?)?[A-Z][a-z]+)\.?\s*$/.exec(text.slice(0, m.index));
+      const before = /([A-Z][a-z]+)\.?\s*$/.exec(text.slice(Math.max(0, m.index - 32), m.index));
       if (before && ((_a = normaliseBook(before[1])) != null ? _a : normaliseBook(`1 ${before[1]}`)))
         continue;
       const start = m.index;
@@ -596,7 +601,8 @@ function chapterPaths(csbFolder, book, chapter) {
   if (meta !== void 0) {
     const folder = `${meta.num} - ${book}`;
     if (meta.singleChapter) {
-      candidates.push(`${csbFolder}/${folder}/${prefix}.md`);
+      if (chapter === 1)
+        candidates.push(`${csbFolder}/${folder}/${prefix}.md`);
     } else {
       candidates.push(`${csbFolder}/${folder}/${prefix}-${String(chapter).padStart(2, "0")}.md`);
     }
@@ -687,7 +693,10 @@ function parseBibleText(text) {
 function loadDownloadedBible(app) {
   if (bibleFile === null)
     return Promise.resolve(null);
-  bible != null ? bible : bible = app.vault.adapter.read(bibleFile).then(parseBibleText, () => bible = null);
+  if (bible === null) {
+    const p = app.vault.adapter.read(bibleFile).then(parseBibleText, () => bible === p ? bible = null : null);
+    bible = p;
+  }
   return bible;
 }
 async function bibleStatus(app) {

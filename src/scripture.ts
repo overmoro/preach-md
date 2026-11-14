@@ -145,11 +145,11 @@ const BOOK_MAP: Record<string, BookName> = {
 	// 2 Peter
 	"2 peter": "2 Peter", "2peter": "2 Peter", "2pet": "2 Peter", "2pe": "2 Peter", "2pt": "2 Peter", "ii peter": "2 Peter", "2 pet": "2 Peter",
 	// 1 John
-	"1 john": "1 John", "1john": "1 John", "1joh": "1 John", "1jn": "1 John", "1jo": "1 John", "i john": "1 John",
+	"1 john": "1 John", "1john": "1 John", "1joh": "1 John", "1jn": "1 John", "1jhn": "1 John", "1jo": "1 John", "i john": "1 John",
 	// 2 John
-	"2 john": "2 John", "2john": "2 John", "2joh": "2 John", "2jn": "2 John", "ii john": "2 John",
+	"2 john": "2 John", "2john": "2 John", "2joh": "2 John", "2jn": "2 John", "2jhn": "2 John", "ii john": "2 John",
 	// 3 John
-	"3 john": "3 John", "3john": "3 John", "3joh": "3 John", "3jn": "3 John", "iii john": "3 John",
+	"3 john": "3 John", "3john": "3 John", "3joh": "3 John", "3jn": "3 John", "3jhn": "3 John", "iii john": "3 John",
 	// Jude
 	jude: "Jude", jud: "Jude",
 	// Revelation
@@ -167,7 +167,9 @@ const BOOK_MAP: Record<string, BookName> = {
  * collide, but the guard covers the class rather than those two names.
  */
 export function normaliseBook(raw: string): BookName | null {
-	const key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+	let key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+	// Numbered abbreviations are keyed unspaced ("1jn"), so "1 Jn" retries without the space.
+	if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key)) key = key.replace(/^([123]) /, "$1");
 	if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key)) return null;
 	return BOOK_MAP[key] ?? null;
 }
@@ -334,7 +336,7 @@ export function parseReferences(text: string, passages: ScriptureRef[] = []): Pa
 			const chapter = verseChapter(passage, verseStart);
 			if (chapter === null) continue;
 			// "Corinthians v.15" or "Jude v.3": the verse belongs to that book, not the passage.
-			const before = /((?:[123]\s?)?[A-Z][a-z]+)\.?\s*$/.exec(text.slice(0, m.index));
+			const before = /([A-Z][a-z]+)\.?\s*$/.exec(text.slice(Math.max(0, m.index - 32), m.index));
 			if (before && (normaliseBook(before[1]) ?? normaliseBook(`1 ${before[1]}`))) continue;
 			const start = m.index;
 			const end = start + m[0].length;
@@ -611,7 +613,8 @@ export function chapterPaths(csbFolder: string, book: string, chapter: number): 
 		const folder = `${meta.num} - ${book}`;
 
 		if (meta.singleChapter) {
-			candidates.push(`${csbFolder}/${folder}/${prefix}.md`);
+			// There is no chapter 2 of Jude to find.
+			if (chapter === 1) candidates.push(`${csbFolder}/${folder}/${prefix}.md`);
 		} else {
 			candidates.push(`${csbFolder}/${folder}/${prefix}-${String(chapter).padStart(2, "0")}.md`);
 		}
@@ -743,7 +746,12 @@ export function parseBibleText(text: string): BibleChapters | null {
 
 function loadDownloadedBible(app: App): Promise<BibleChapters | null> {
 	if (bibleFile === null) return Promise.resolve(null);
-	bible ??= app.vault.adapter.read(bibleFile).then(parseBibleText, () => (bible = null));
+	if (bible === null) {
+		const p: Promise<BibleChapters | null> = app.vault.adapter
+			.read(bibleFile)
+			.then(parseBibleText, () => (bible === p ? (bible = null) : null));
+		bible = p;
+	}
 	return bible;
 }
 
