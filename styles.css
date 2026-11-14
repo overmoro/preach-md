@@ -307,18 +307,21 @@
 
 /* Left-side group: outline + passage buttons */
 .preach-bottom-left {
+	flex: 1 1 0;
 	display: flex;
 	align-items: flex-end;
 	gap: 4px;
-	pointer-events: all;
+	pointer-events: none;
 }
 
 /* Right-side group: edit button + exit wrap side by side */
 .preach-bottom-right {
+	flex: 1 1 0;
+	justify-content: flex-end;
 	display: flex;
 	align-items: flex-end;
 	gap: 4px;
-	pointer-events: all;
+	pointer-events: none;
 }
 
 /* ------------------------------------------------------------------ */
@@ -811,6 +814,7 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 
 .preach-inline-fmt-row {
 	display: flex;
+	justify-content: center;
 	align-items: center;
 	gap: 4px;
 }
@@ -1030,6 +1034,15 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 }
 
 @media (prefers-reduced-motion: reduce) {
+	.preach-timer[data-run-state="running"] {
+		animation: none;
+	}
+
+	.preach-back-pill,
+	.preach-inline-format-bar {
+		transition: none;
+	}
+
 	.preach-strip .preach-strip-seg::before {
 		transition: none;
 	}

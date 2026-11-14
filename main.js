@@ -1253,11 +1253,14 @@ var PreachMDSettingTab = class extends import_obsidian2.PluginSettingTab {
       })
     );
     new import_obsidian2.Setting(containerEl).setName("Display").setHeading();
-    new import_obsidian2.Setting(containerEl).setName("Text size (%)").setDesc("Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.").addText(
-      (text) => text.setPlaceholder("100").setValue(String(this.plugin.settings.textScalePercent)).onChange((value) => {
+    new import_obsidian2.Setting(containerEl).setName("Text size (%)").setDesc("Scale for sermon text in preach mode, 70 to 200. Also adjustable with the A- and A+ buttons.").addText((text) => {
+      text.setPlaceholder("100").setValue(String(this.plugin.settings.textScalePercent)).onChange((value) => {
         void this.setControlValue("textScalePercent", value);
-      })
-    );
+      });
+      text.inputEl.addEventListener("blur", () => {
+        text.setValue(String(this.plugin.settings.textScalePercent));
+      });
+    });
     new import_obsidian2.Setting(containerEl).setName("Scripture").setHeading();
     new import_obsidian2.Setting(containerEl).setName("Bible folder path").setDesc(
       'Vault path to your bible chapter files. Each book is a subfolder, either plain (e.g. "Matthew") or numbered canon-order (e.g. "40 - Matthew"); each chapter is a separate .md file. Checked before the offline Bible.'
@@ -2168,8 +2171,8 @@ var PreachView = class extends import_obsidian4.ItemView {
     this.idleTimeout = null;
     // Wake lock
     this.wakeLock = null;
-    // Edge-swipe suppression
-    this.touchHandler = null;
+    // Set in onClose so onOpen stops carrying on after an early close
+    this.closed = false;
     // Exit confirm state
     this.exitConfirming = false;
     this.exitConfirmTimeout = null;
@@ -2220,6 +2223,7 @@ var PreachView = class extends import_obsidian4.ItemView {
     );
     this.formatManager = new FormatManager(this.app, this.file);
     this.buildUI();
+    this.containerEl.dataset.ignoreSwipe = "true";
     this.registerInterval(window.setInterval(() => this.strip.refresh(), 1e3));
     this.preachFormatToolbar = new PreachFormatToolbar(
       this.formatManager,
@@ -2232,7 +2236,8 @@ var PreachView = class extends import_obsidian4.ItemView {
       }
     });
     await this.requestWakeLock();
-    this.suppressEdgeSwipes();
+    if (this.closed)
+      return;
     this.registerEvent(
       this.app.metadataCache.on("changed", (changed, data, cache) => {
         var _a;
@@ -2245,6 +2250,8 @@ var PreachView = class extends import_obsidian4.ItemView {
     );
     if (this.file) {
       await this.renderFile(this.file);
+      if (this.closed)
+        return;
     }
     this.preachLeaf = this.leaf;
     this.registerEvent(
@@ -2261,6 +2268,7 @@ var PreachView = class extends import_obsidian4.ItemView {
   }
   async onClose() {
     var _a, _b;
+    this.closed = true;
     this.renderGen++;
     if (this.idleTimeout !== null) {
       window.clearTimeout(this.idleTimeout);
@@ -2285,7 +2293,6 @@ var PreachView = class extends import_obsidian4.ItemView {
     this.rightSplitWasOpen = false;
     this.timer.stop();
     await this.releaseWakeLock();
-    this.restoreEdgeSwipes();
     this.renderComponent.unload();
   }
   async setFile(file) {
@@ -2574,7 +2581,8 @@ var PreachView = class extends import_obsidian4.ItemView {
         });
         btn.addEventListener("pointerdown", (e) => {
           e.stopPropagation();
-          el.scrollIntoView({ behavior: "smooth", block: "start" });
+          const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
           this.closeOutline();
           this.closePassage();
         });
@@ -2774,7 +2782,12 @@ var PreachView = class extends import_obsidian4.ItemView {
     try {
       if ("wakeLock" in navigator) {
         const nav = navigator;
-        this.wakeLock = await nav.wakeLock.request("screen");
+        const lock = await nav.wakeLock.request("screen");
+        if (this.closed) {
+          await lock.release();
+          return;
+        }
+        this.wakeLock = lock;
       }
     } catch (e) {
     }
@@ -2786,29 +2799,6 @@ var PreachView = class extends import_obsidian4.ItemView {
         this.wakeLock = null;
       }
     } catch (e) {
-    }
-  }
-  // Suppress edge-swipe gestures (Obsidian Mobile sidebar open)
-  suppressEdgeSwipes() {
-    this.touchHandler = (e) => {
-      if (e.touches.length === 1) {
-        const x = e.touches[0].clientX;
-        if (x < 30 || x > window.innerWidth - 30) {
-          e.stopPropagation();
-        }
-      }
-    };
-    document.addEventListener("touchstart", this.touchHandler, {
-      capture: true,
-      passive: true
-    });
-  }
-  restoreEdgeSwipes() {
-    if (this.touchHandler) {
-      document.removeEventListener("touchstart", this.touchHandler, {
-        capture: true
-      });
-      this.touchHandler = null;
     }
   }
 };
@@ -2842,6 +2832,10 @@ var PreachMDPlugin = class extends import_obsidian5.Plugin {
   }
   async saveSettings() {
     await this.saveData(this.settings);
+    for (const leaf of this.app.workspace.getLeavesOfType(PREACH_VIEW_TYPE)) {
+      if (leaf.view instanceof PreachView)
+        leaf.view.applyTextScale();
+    }
   }
   async openPreachMode() {
     var _a;

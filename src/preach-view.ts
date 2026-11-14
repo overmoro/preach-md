@@ -89,8 +89,8 @@ export class PreachView extends ItemView {
 	// Wake lock
 	private wakeLock: WakeLockSentinel | null = null;
 
-	// Edge-swipe suppression
-	private touchHandler: ((e: TouchEvent) => void) | null = null;
+	// Set in onClose so onOpen stops carrying on after an early close
+	private closed = false;
 
 	// Exit confirm state
 	private exitConfirming = false;
@@ -165,6 +165,8 @@ export class PreachView extends ItemView {
 		this.formatManager = new FormatManager(this.app, this.file);
 
 		this.buildUI();
+		// Obsidian's swipe detector skips marked elements: no sidebar, pull-down or back swipes here
+		this.containerEl.dataset.ignoreSwipe = "true";
 		this.registerInterval(window.setInterval(() => this.strip.refresh(), 1000));
 
 		// Inline format toolbar restored in v0.6.6 with touch-gated listeners.
@@ -183,7 +185,7 @@ export class PreachView extends ItemView {
 			}
 		});
 		await this.requestWakeLock();
-		this.suppressEdgeSwipes();
+		if (this.closed) return;
 
 		// Registered before the first render so a re-index during it isn't missed
 		this.registerEvent(
@@ -198,6 +200,7 @@ export class PreachView extends ItemView {
 
 		if (this.file) {
 			await this.renderFile(this.file);
+			if (this.closed) return;
 		}
 
 		// Track this leaf so pills can switch focus back to it
@@ -221,6 +224,7 @@ export class PreachView extends ItemView {
 	}
 
 	async onClose(): Promise<void> {
+		this.closed = true;
 		this.renderGen++;
 		if (this.idleTimeout !== null) {
 			window.clearTimeout(this.idleTimeout);
@@ -250,7 +254,6 @@ export class PreachView extends ItemView {
 
 		this.timer.stop();
 		await this.releaseWakeLock();
-		this.restoreEdgeSwipes();
 		this.renderComponent.unload();
 	}
 
@@ -428,7 +431,7 @@ export class PreachView extends ItemView {
 		this.resetIdleTimer();
 	}
 
-	private applyTextScale(): void {
+	applyTextScale(): void {
 		this.containerEl.setCssProps({
 			"--preach-text-scale": String(this.plugin.settings.textScalePercent / 100),
 		});
@@ -592,7 +595,8 @@ export class PreachView extends ItemView {
 				});
 				btn.addEventListener("pointerdown", (e: PointerEvent) => {
 					e.stopPropagation();
-					el.scrollIntoView({ behavior: "smooth", block: "start" });
+					const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+					el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
 					this.closeOutline();
 					this.closePassage();
 				});
@@ -818,7 +822,12 @@ export class PreachView extends ItemView {
 		try {
 			if ("wakeLock" in navigator) {
 				const nav = navigator as Navigator & { wakeLock: WakeLockAPI };
-				this.wakeLock = await nav.wakeLock.request("screen");
+				const lock = await nav.wakeLock.request("screen");
+				if (this.closed) {
+					await lock.release();
+					return;
+				}
+				this.wakeLock = lock;
 			}
 		} catch {
 			// Wake lock unavailable - non-fatal
@@ -833,31 +842,6 @@ export class PreachView extends ItemView {
 			}
 		} catch {
 			// Ignore release errors
-		}
-	}
-
-	// Suppress edge-swipe gestures (Obsidian Mobile sidebar open)
-	private suppressEdgeSwipes(): void {
-		this.touchHandler = (e: TouchEvent) => {
-			if (e.touches.length === 1) {
-				const x = e.touches[0].clientX;
-				if (x < 30 || x > window.innerWidth - 30) {
-					e.stopPropagation();
-				}
-			}
-		};
-		document.addEventListener("touchstart", this.touchHandler, {
-			capture: true,
-			passive: true,
-		});
-	}
-
-	private restoreEdgeSwipes(): void {
-		if (this.touchHandler) {
-			document.removeEventListener("touchstart", this.touchHandler, {
-				capture: true,
-			});
-			this.touchHandler = null;
 		}
 	}
 }
