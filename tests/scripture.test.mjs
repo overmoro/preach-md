@@ -447,6 +447,26 @@ test("spaced numbered abbreviations keep their number", () => {
 	assert.deepEqual(tuples("Jn 3:11"), [["Jn 3:11", "John", 3, 11, 3, 11]]);
 });
 
+test("Roman numerals and extra spaces keep the book's number", () => {
+	for (const [text, book] of [
+		["I John 3:16", "1 John"], ["I Jn 3:11", "1 John"], ["II Jn 1:1", "2 John"], ["III John 1:4", "3 John"],
+		["1  Jn 3:11", "1 John"], ["II Cor 5:17", "2 Corinthians"], ["I Sam 17:45", "1 Samuel"],
+	]) {
+		assert.deepEqual(tuples(text).map((t) => [t[0], t[1]]), [[text, book]], text);
+	}
+	assert.equal(normaliseBook("I Jn"), "1 John");
+	assert.equal(normaliseBook("ii samuel"), "2 Samuel");
+});
+
+test("a number never falls back to an unnumbered book", () => {
+	for (const t of ["1 Jon 2:3", "3 Ti 1:2", "2  Jon 1:1", "II Jon 1:1"]) {
+		assert.deepEqual(tuples(t), [], t);
+	}
+	// A lone capital I is usually the pronoun, so the name after it still counts.
+	assert.deepEqual(tuples("Then I Am 5:24"), [["Am 5:24", "Amos", 5, 24, 5, 24]]);
+	assert.deepEqual(tuples("As I Mark 4:3"), [["Mark 4:3", "Mark", 4, 3, 4, 3]]);
+});
+
 test("is, am and mr never make a dotted reference", () => {
 	assert.deepEqual(tuples("Mr. 5:30 said"), []);
 	assert.deepEqual(tuples("I am. 10:30 we start"), []);
