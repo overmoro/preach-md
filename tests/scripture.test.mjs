@@ -454,6 +454,9 @@ test("Roman numerals and extra spaces keep the book's number", () => {
 	]) {
 		assert.deepEqual(tuples(text).map((t) => [t[0], t[1]]), [[text, book]], text);
 	}
+	// The number has to sit on the same line as the name.
+	assert.deepEqual(tuples("Week 2\n\nJohn 1:1"), [["John 1:1", "John", 1, 1, 1, 1]]);
+	assert.deepEqual(tuples("so I\nJohn 3:16"), [["John 3:16", "John", 3, 16, 3, 16]]);
 	assert.equal(normaliseBook("I Jn"), "1 John");
 	assert.equal(normaliseBook("ii samuel"), "2 Samuel");
 });

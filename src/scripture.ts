@@ -221,7 +221,7 @@ export interface ScriptureRef {
  * unreachable from real sermon text.
  */
 const SCRIPTURE_REGEX =
-	/\b((?:[123]\s*|I{1,3}\s+)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)(\.)?\s+(\d+):(\d+)(?:[-–](\d+)(?::(\d+))?)?/g;
+	/\b((?:[123][^\S\n]*|I{1,3}[^\S\n]+)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)(\.)?\s+(\d+):(\d+)(?:[-–](\d+)(?::(\d+))?)?/g;
 
 /** "; 10:16" or ", 10:30-33" straight after a reference. Sticky: it only matches at lastIndex. */
 const CONTINUATION_REGEX =

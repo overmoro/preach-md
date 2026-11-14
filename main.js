@@ -362,7 +362,7 @@ function normaliseBook(raw) {
     return null;
   return (_a = BOOK_MAP[key]) != null ? _a : null;
 }
-var SCRIPTURE_REGEX = /\b((?:[123]\s*|I{1,3}\s+)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)(\.)?\s+(\d+):(\d+)(?:[-–](\d+)(?::(\d+))?)?/g;
+var SCRIPTURE_REGEX = /\b((?:[123][^\S\n]*|I{1,3}[^\S\n]+)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)(\.)?\s+(\d+):(\d+)(?:[-–](\d+)(?::(\d+))?)?/g;
 var CONTINUATION_REGEX = /[;,]\s?(\d{1,3}):(\d{1,3})(?:[-–](\d{1,3})(?::(\d{1,3}))?)?\b(?!\s?[ap]\.?m\b)/iy;
 var VERSE_ONLY_REGEX = /\bvv?(?:\.\s?|\s)?(\d{1,3})(?:[-–](\d{1,3}))?\b(?![:.]\d)/g;
 var CHAPTER_ONLY_REGEX = /^(.+?)\s+(\d{1,3})(?:\s?[-–]\s?(\d{1,3}))?$/;
