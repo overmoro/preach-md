@@ -1524,6 +1524,18 @@ function sectionHeadingEls(root, level) {
   return Array.from(root.querySelectorAll("h" + level));
 }
 var TEXT_NODE = 3;
+var UNFOLD_MS = 100;
+function unfoldCallouts(el) {
+  var _a, _b, _c;
+  const folded = [];
+  for (let c = (_a = el.parentElement) == null ? void 0 : _a.closest(".callout"); c; c = (_b = c.parentElement) == null ? void 0 : _b.closest(".callout")) {
+    if (c.classList.contains("is-collapsed"))
+      folded.unshift(c);
+  }
+  for (const c of folded)
+    (_c = c.querySelector(".callout-title")) == null ? void 0 : _c.click();
+  return folded.length > 0;
+}
 function lastTextNode(node) {
   var _a;
   for (let n = node.lastChild; n; n = n.previousSibling) {
@@ -1605,7 +1617,11 @@ var SectionStrip = class {
           return;
         (_a2 = this.onJump) == null ? void 0 : _a2.call(this);
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+        const go = () => heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+        if (unfoldCallouts(heading))
+          window.setTimeout(go, UNFOLD_MS + 100);
+        else
+          go();
       });
       this.segs.push(seg);
     });
