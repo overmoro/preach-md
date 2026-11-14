@@ -484,6 +484,14 @@
 	user-select: none;
 }
 
+.preach-scripture-source {
+	font-size: 0.7em;
+	color: var(--preach-scripture-verse-num-color);
+	letter-spacing: 0.04em;
+	margin-left: 0.4em;
+	user-select: none;
+}
+
 .preach-scripture-expand--error {
 	border-left-color: rgba(200, 80, 80, 0.5);
 	background: rgba(60, 20, 20, 0.7);

@@ -820,22 +820,22 @@ async function readRange(
  * verse 1 to the end verse of the last chapter (verseEnd Infinity: to the end
  * of it). Verses inside a chapter's range that the translation omits are skipped.
  * The vault folder is tried first; the downloaded Bible is used only if the
- * folder can't serve the whole passage.
+ * folder can't serve the whole passage; source says which one served the rows.
  * Throws a user-readable string on error.
  */
 export async function fetchVerses(
 	app: App,
 	csbFolder: string,
 	ref: ScriptureRef
-): Promise<VerseRow[]> {
+): Promise<{ verses: VerseRow[]; source: "vault" | "bsb" }> {
 	const notFound = () => new Error(`Passage not found: ${ref.raw}`);
 	if (ref.chapterEnd < ref.chapter) throw notFound();
 
-	const rows =
-		(await readRange(ref, (c) => loadVaultChapter(app, csbFolder, ref.book, c))) ??
-		(await readRange(ref, async (c) => (await loadDownloadedBible(app))?.get(`${ref.book} ${c}`) ?? null));
-	if (!rows) throw notFound();
-	return rows;
+	const vault = await readRange(ref, (c) => loadVaultChapter(app, csbFolder, ref.book, c));
+	if (vault) return { verses: vault, source: "vault" };
+	const bsb = await readRange(ref, async (c) => (await loadDownloadedBible(app))?.get(`${ref.book} ${c}`) ?? null);
+	if (!bsb) throw notFound();
+	return { verses: bsb, source: "bsb" };
 }
 
 
@@ -972,11 +972,11 @@ export class ScriptureExpander {
 		span.classList.add("preach-scripture-ref--open");
 
 		try {
-			const verses = await fetchVerses(this.app, this.csbFolder, ref);
+			const result = await fetchVerses(this.app, this.csbFolder, ref);
 			expandEl.empty();
 			expandEl.className = "preach-scripture-expand";
 
-			await this.renderVerses(expandEl, ref.chapter, verses);
+			await this.renderVerses(expandEl, ref.chapter, result);
 
 			// Tap on the expansion itself collapses it
 			expandEl.addEventListener("pointerdown", (e: PointerEvent) => {
@@ -1007,7 +1007,7 @@ export class ScriptureExpander {
 	private async renderVerses(
 		el: HTMLElement,
 		firstChapter: number,
-		verses: { chapter: number; verse: number; text: string }[]
+		{ verses, source }: { verses: VerseRow[]; source: "vault" | "bsb" }
 	): Promise<void> {
 		const passageEl = el.createSpan({ cls: "preach-scripture-passage" });
 
@@ -1041,6 +1041,7 @@ export class ScriptureExpander {
 			// Space between verses
 			passageEl.appendText(" ");
 		}
+		if (source === "bsb") el.createSpan({ cls: "preach-scripture-source", text: "BSB" });
 	}
 
 	async renderPassage(el: HTMLElement, passages: ScriptureRef[]): Promise<void> {

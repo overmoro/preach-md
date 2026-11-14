@@ -732,17 +732,19 @@ async function readRange(ref, load) {
   return results.length > 0 ? results : null;
 }
 async function fetchVerses(app, csbFolder, ref) {
-  var _a;
   const notFound = () => new Error(`Passage not found: ${ref.raw}`);
   if (ref.chapterEnd < ref.chapter)
     throw notFound();
-  const rows = (_a = await readRange(ref, (c) => loadVaultChapter(app, csbFolder, ref.book, c))) != null ? _a : await readRange(ref, async (c) => {
-    var _a2, _b;
-    return (_b = (_a2 = await loadDownloadedBible(app)) == null ? void 0 : _a2.get(`${ref.book} ${c}`)) != null ? _b : null;
+  const vault = await readRange(ref, (c) => loadVaultChapter(app, csbFolder, ref.book, c));
+  if (vault)
+    return { verses: vault, source: "vault" };
+  const bsb = await readRange(ref, async (c) => {
+    var _a, _b;
+    return (_b = (_a = await loadDownloadedBible(app)) == null ? void 0 : _a.get(`${ref.book} ${c}`)) != null ? _b : null;
   });
-  if (!rows)
+  if (!bsb)
     throw notFound();
-  return rows;
+  return { verses: bsb, source: "bsb" };
 }
 var ScriptureExpander = class {
   constructor(app, csbFolder, component, sourcePath) {
@@ -839,10 +841,10 @@ var ScriptureExpander = class {
     this.expanded.set(span2, expandEl);
     span2.classList.add("preach-scripture-ref--open");
     try {
-      const verses = await fetchVerses(this.app, this.csbFolder, ref);
+      const result = await fetchVerses(this.app, this.csbFolder, ref);
       expandEl.empty();
       expandEl.className = "preach-scripture-expand";
-      await this.renderVerses(expandEl, ref.chapter, verses);
+      await this.renderVerses(expandEl, ref.chapter, result);
       expandEl.addEventListener("pointerdown", (e) => {
         e.stopPropagation();
         expandEl.remove();
@@ -866,7 +868,7 @@ var ScriptureExpander = class {
    * Render verses as one flowing paragraph into el.
    * Each verse gets an inline superscript number; no block breaks between verses.
    */
-  async renderVerses(el, firstChapter, verses) {
+  async renderVerses(el, firstChapter, { verses, source }) {
     const passageEl = el.createSpan({ cls: "preach-scripture-passage" });
     let prevChapter = firstChapter;
     for (const { chapter, verse, text } of verses) {
@@ -885,6 +887,8 @@ var ScriptureExpander = class {
       }
       passageEl.appendText(" ");
     }
+    if (source === "bsb")
+      el.createSpan({ cls: "preach-scripture-source", text: "BSB" });
   }
   async renderPassage(el, passages) {
     el.empty();
