@@ -1469,7 +1469,7 @@ function parseTime(text) {
   const minutes = Number(m[1].replace(",", "."));
   if (!(minutes > 0 && minutes <= MAX_SECTION_MINUTES))
     return null;
-  return { minutes, rest: text.slice(0, m.index).trimEnd() };
+  return { minutes, rest: text.slice(0, m.index).replace(/\s+$/, "") };
 }
 function readHeadingTime(full, lastText) {
   const whole = parseTime(full);
