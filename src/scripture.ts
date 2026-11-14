@@ -39,17 +39,17 @@ const BOOK_MAP: Record<string, BookName> = {
 	// Ruth
 	ruth: "Ruth", rut: "Ruth", ru: "Ruth",
 	// 1 Samuel
-	"1 samuel": "1 Samuel", "1samuel": "1 Samuel", "1sam": "1 Samuel", "1sa": "1 Samuel", "1s": "1 Samuel", "i samuel": "1 Samuel", "i sam": "1 Samuel",
+	"1 samuel": "1 Samuel", "1samuel": "1 Samuel", "1sam": "1 Samuel", "1sa": "1 Samuel", "1s": "1 Samuel",
 	// 2 Samuel
-	"2 samuel": "2 Samuel", "2samuel": "2 Samuel", "2sam": "2 Samuel", "2sa": "2 Samuel", "ii samuel": "2 Samuel", "ii sam": "2 Samuel",
+	"2 samuel": "2 Samuel", "2samuel": "2 Samuel", "2sam": "2 Samuel", "2sa": "2 Samuel",
 	// 1 Kings
-	"1 kings": "1 Kings", "1kings": "1 Kings", "1kgs": "1 Kings", "1ki": "1 Kings", "1kg": "1 Kings", "i kings": "1 Kings",
+	"1 kings": "1 Kings", "1kings": "1 Kings", "1kgs": "1 Kings", "1ki": "1 Kings", "1kg": "1 Kings",
 	// 2 Kings
-	"2 kings": "2 Kings", "2kings": "2 Kings", "2kgs": "2 Kings", "2ki": "2 Kings", "ii kings": "2 Kings",
+	"2 kings": "2 Kings", "2kings": "2 Kings", "2kgs": "2 Kings", "2ki": "2 Kings",
 	// 1 Chronicles
-	"1 chronicles": "1 Chronicles", "1chronicles": "1 Chronicles", "1chr": "1 Chronicles", "1ch": "1 Chronicles", "i chronicles": "1 Chronicles",
+	"1 chronicles": "1 Chronicles", "1chronicles": "1 Chronicles", "1chr": "1 Chronicles", "1ch": "1 Chronicles",
 	// 2 Chronicles
-	"2 chronicles": "2 Chronicles", "2chronicles": "2 Chronicles", "2chr": "2 Chronicles", "2ch": "2 Chronicles", "ii chronicles": "2 Chronicles",
+	"2 chronicles": "2 Chronicles", "2chronicles": "2 Chronicles", "2chr": "2 Chronicles", "2ch": "2 Chronicles",
 	// Ezra
 	ezra: "Ezra", ezr: "Ezra",
 	// Nehemiah
@@ -113,9 +113,9 @@ const BOOK_MAP: Record<string, BookName> = {
 	// Romans
 	romans: "Romans", rom: "Romans", ro: "Romans", rm: "Romans",
 	// 1 Corinthians
-	"1 corinthians": "1 Corinthians", "1corinthians": "1 Corinthians", "1cor": "1 Corinthians", "1co": "1 Corinthians", "i corinthians": "1 Corinthians", "i cor": "1 Corinthians", "1 cor": "1 Corinthians",
+	"1 corinthians": "1 Corinthians", "1corinthians": "1 Corinthians", "1cor": "1 Corinthians", "1co": "1 Corinthians", "1 cor": "1 Corinthians",
 	// 2 Corinthians
-	"2 corinthians": "2 Corinthians", "2corinthians": "2 Corinthians", "2cor": "2 Corinthians", "2co": "2 Corinthians", "ii corinthians": "2 Corinthians", "ii cor": "2 Corinthians", "2 cor": "2 Corinthians",
+	"2 corinthians": "2 Corinthians", "2corinthians": "2 Corinthians", "2cor": "2 Corinthians", "2co": "2 Corinthians", "2 cor": "2 Corinthians",
 	// Galatians
 	galatians: "Galatians", gal: "Galatians", ga: "Galatians",
 	// Ephesians
@@ -125,13 +125,13 @@ const BOOK_MAP: Record<string, BookName> = {
 	// Colossians
 	colossians: "Colossians", col: "Colossians",
 	// 1 Thessalonians
-	"1 thessalonians": "1 Thessalonians", "1thessalonians": "1 Thessalonians", "1thess": "1 Thessalonians", "1th": "1 Thessalonians", "i thessalonians": "1 Thessalonians", "1 thess": "1 Thessalonians",
+	"1 thessalonians": "1 Thessalonians", "1thessalonians": "1 Thessalonians", "1thess": "1 Thessalonians", "1th": "1 Thessalonians", "1 thess": "1 Thessalonians",
 	// 2 Thessalonians
-	"2 thessalonians": "2 Thessalonians", "2thessalonians": "2 Thessalonians", "2thess": "2 Thessalonians", "2th": "2 Thessalonians", "ii thessalonians": "2 Thessalonians", "2 thess": "2 Thessalonians",
+	"2 thessalonians": "2 Thessalonians", "2thessalonians": "2 Thessalonians", "2thess": "2 Thessalonians", "2th": "2 Thessalonians", "2 thess": "2 Thessalonians",
 	// 1 Timothy
-	"1 timothy": "1 Timothy", "1timothy": "1 Timothy", "1tim": "1 Timothy", "1ti": "1 Timothy", "i timothy": "1 Timothy", "1 tim": "1 Timothy",
+	"1 timothy": "1 Timothy", "1timothy": "1 Timothy", "1tim": "1 Timothy", "1ti": "1 Timothy", "1 tim": "1 Timothy",
 	// 2 Timothy
-	"2 timothy": "2 Timothy", "2timothy": "2 Timothy", "2tim": "2 Timothy", "2ti": "2 Timothy", "ii timothy": "2 Timothy", "2 tim": "2 Timothy",
+	"2 timothy": "2 Timothy", "2timothy": "2 Timothy", "2tim": "2 Timothy", "2ti": "2 Timothy", "2 tim": "2 Timothy",
 	// Titus
 	titus: "Titus", tit: "Titus", ti: "Titus",
 	// Philemon
@@ -141,15 +141,15 @@ const BOOK_MAP: Record<string, BookName> = {
 	// James
 	james: "James", jas: "James", jm: "James",
 	// 1 Peter
-	"1 peter": "1 Peter", "1peter": "1 Peter", "1pet": "1 Peter", "1pe": "1 Peter", "1pt": "1 Peter", "i peter": "1 Peter", "1 pet": "1 Peter",
+	"1 peter": "1 Peter", "1peter": "1 Peter", "1pet": "1 Peter", "1pe": "1 Peter", "1pt": "1 Peter", "1 pet": "1 Peter",
 	// 2 Peter
-	"2 peter": "2 Peter", "2peter": "2 Peter", "2pet": "2 Peter", "2pe": "2 Peter", "2pt": "2 Peter", "ii peter": "2 Peter", "2 pet": "2 Peter",
+	"2 peter": "2 Peter", "2peter": "2 Peter", "2pet": "2 Peter", "2pe": "2 Peter", "2pt": "2 Peter", "2 pet": "2 Peter",
 	// 1 John
-	"1 john": "1 John", "1john": "1 John", "1joh": "1 John", "1jn": "1 John", "1jo": "1 John", "i john": "1 John",
+	"1 john": "1 John", "1john": "1 John", "1joh": "1 John", "1jn": "1 John", "1jhn": "1 John", "1jo": "1 John",
 	// 2 John
-	"2 john": "2 John", "2john": "2 John", "2joh": "2 John", "2jn": "2 John", "ii john": "2 John",
+	"2 john": "2 John", "2john": "2 John", "2joh": "2 John", "2jn": "2 John", "2jhn": "2 John",
 	// 3 John
-	"3 john": "3 John", "3john": "3 John", "3joh": "3 John", "3jn": "3 John", "iii john": "3 John",
+	"3 john": "3 John", "3john": "3 John", "3joh": "3 John", "3jn": "3 John", "3jhn": "3 John",
 	// Jude
 	jude: "Jude", jud: "Jude",
 	// Revelation
@@ -167,7 +167,10 @@ const BOOK_MAP: Record<string, BookName> = {
  * collide, but the guard covers the class rather than those two names.
  */
 export function normaliseBook(raw: string): BookName | null {
-	const key = raw.trim().toLowerCase().replace(/\s+/g, " ");
+	// "II John" reads as "2 John": Roman numerals become digits before any lookup.
+	let key = raw.trim().toLowerCase().replace(/\s+/g, " ").replace(/^(i{1,3}) /, (_, r: string) => `${r.length} `);
+	// Numbered abbreviations are keyed unspaced ("1jn"), so "1 Jn" retries without the space.
+	if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key)) key = key.replace(/^([123]) /, "$1");
 	if (!Object.prototype.hasOwnProperty.call(BOOK_MAP, key)) return null;
 	return BOOK_MAP[key] ?? null;
 }
@@ -202,7 +205,7 @@ export interface ScriptureRef {
  *   group 6: (optional) end verse of a cross-chapter range, "John 3:16-4:2"
  *
  * Handles:
- *   - Numbered books: "1 Cor", "1Cor", "2 John"
+ *   - Numbered books: "1 Cor", "1Cor", "2 John", "II John"
  *   - Full names: "Matthew", "John", "Romans"
  *   - Names joined by "of": "Song of Solomon", "Song of Songs"
  *   - Verse ranges: "John 3:16-18", "Rom 8:28–30" (hyphen or en dash)
@@ -218,7 +221,7 @@ export interface ScriptureRef {
  * unreachable from real sermon text.
  */
 const SCRIPTURE_REGEX =
-	/\b((?:[123]\s?)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)(\.)?\s+(\d+):(\d+)(?:[-–](\d+)(?::(\d+))?)?/g;
+	/\b((?:[123][^\S\n]*|I{1,3}[^\S\n]+)?[A-Z][a-z]+(?:\s(?:of\s)?[A-Z][a-z]+)?)(\.)?\s+(\d+):(\d+)(?:[-–](\d+)(?::(\d+))?)?/g;
 
 /** "; 10:16" or ", 10:30-33" straight after a reference. Sticky: it only matches at lastIndex. */
 const CONTINUATION_REGEX =
@@ -269,11 +272,13 @@ export function parseReferences(text: string, passages: ScriptureRef[] = []): Pa
 		// every reference that began a sentence. Try the longest name first, then
 		// progressively shorter suffixes, so "Song of Solomon" still wins over
 		// "Solomon" and "1 Cor" over "Cor".
-		const words = rawBook.split(" ");
+		const words = rawBook.match(/\S+\s*/g) ?? [];
 		let book: BookName | null = null;
 		let offset = 0;
 		for (let w = 0; w < words.length; w++) {
-			const candidate = words.slice(w).join(" ");
+			// A number belongs to the name after it: "1 Jon" isn't Jonah. A lone "I" may be the pronoun.
+			if (w === 1 && /^(?:[123]|I{2,3})\s/.test(rawBook)) continue;
+			const candidate = words.slice(w).join("");
 			const resolved = normaliseBook(candidate);
 			if (resolved !== null) {
 				book = resolved;
@@ -282,7 +287,7 @@ export function parseReferences(text: string, passages: ScriptureRef[] = []): Pa
 			}
 		}
 		if (book === null) continue;
-		if (m[2] && DOTTED_EXCLUDED.includes(words[words.length - 1].toLowerCase())) continue;
+		if (m[2] && DOTTED_EXCLUDED.includes(words[words.length - 1].trim().toLowerCase())) continue;
 
 		const chapter = parseInt(m[3], 10);
 		const verseStart = parseInt(m[4], 10);
@@ -334,7 +339,7 @@ export function parseReferences(text: string, passages: ScriptureRef[] = []): Pa
 			const chapter = verseChapter(passage, verseStart);
 			if (chapter === null) continue;
 			// "Corinthians v.15" or "Jude v.3": the verse belongs to that book, not the passage.
-			const before = /((?:[123]\s?)?[A-Z][a-z]+)\.?\s*$/.exec(text.slice(0, m.index));
+			const before = /([A-Z][a-z]+)\.?\s*$/.exec(text.slice(Math.max(0, m.index - 32), m.index));
 			if (before && (normaliseBook(before[1]) ?? normaliseBook(`1 ${before[1]}`))) continue;
 			const start = m.index;
 			const end = start + m[0].length;
@@ -611,7 +616,8 @@ export function chapterPaths(csbFolder: string, book: string, chapter: number): 
 		const folder = `${meta.num} - ${book}`;
 
 		if (meta.singleChapter) {
-			candidates.push(`${csbFolder}/${folder}/${prefix}.md`);
+			// There is no chapter 2 of Jude to find.
+			if (chapter === 1) candidates.push(`${csbFolder}/${folder}/${prefix}.md`);
 		} else {
 			candidates.push(`${csbFolder}/${folder}/${prefix}-${String(chapter).padStart(2, "0")}.md`);
 		}
@@ -743,7 +749,12 @@ export function parseBibleText(text: string): BibleChapters | null {
 
 function loadDownloadedBible(app: App): Promise<BibleChapters | null> {
 	if (bibleFile === null) return Promise.resolve(null);
-	bible ??= app.vault.adapter.read(bibleFile).then(parseBibleText, () => (bible = null));
+	if (bible === null) {
+		const p: Promise<BibleChapters | null> = app.vault.adapter
+			.read(bibleFile)
+			.then(parseBibleText, () => (bible === p ? (bible = null) : null));
+		bible = p;
+	}
 	return bible;
 }
 

@@ -257,6 +257,19 @@ function ref(over) {
 
 const flat = (rows) => rows.map((r) => `${r.chapter}:${r.verse}=${r.text}`);
 
+test("a single-chapter book has no numbered path for any other chapter", async () => {
+	assert.deepEqual(chapterPaths("Bible", "Jude", 2), ["Bible/Jude/Jude 2.md"]);
+	const numbered = fakeApp({ "J1/65 - Jude/Jude.md": chapterFile(1, 5) });
+	const plain = fakeApp({ "J2/Jude/Jude 1.md": chapterFile(1, 5) });
+	const jude = (over) => ref({ book: "Jude", chapter: 1, verseStart: 3, chapterEnd: 1, verseEnd: 3, raw: "Jude", ...over });
+	assert.deepEqual(flat(await fetchVerses(numbered, "J1", jude({}))), ["1:3=c1v3 text"]);
+	assert.deepEqual(flat(await fetchVerses(plain, "J2", jude({}))), ["1:3=c1v3 text"]);
+	for (const [app, dir] of [[numbered, "J1"], [plain, "J2"]]) {
+		await assert.rejects(fetchVerses(app, dir, jude({ chapter: 2, chapterEnd: 2, verseStart: 1, verseEnd: 1 })), /Passage not found/);
+		await assert.rejects(fetchVerses(app, dir, jude({ chapterEnd: 2, verseEnd: 1 })), /Passage not found/);
+	}
+});
+
 test("a two-chapter range reads to the end of the first chapter then from verse 1", async () => {
 	const app = fakeApp({
 		"B1/John/John 3.md": chapterFile(3, 4),
@@ -410,6 +423,53 @@ test("dotted book abbreviations are detected, with the raw dot", () => {
 	assert.deepEqual(tuples("Rom. 8:28; 10:9"), [r("Rom. 8:28", "Romans", 8, 28), r("10:9", "Romans", 10, 9)]);
 });
 
+test("spaced numbered abbreviations keep their number", () => {
+	const cases = {
+		"1 Jn": "1 John", "2 Jn": "2 John", "3 Jn": "3 John", "1 Jo": "1 John",
+		"1 Th": "1 Thessalonians", "2 Th": "2 Thessalonians", "1 Pe": "1 Peter", "2 Pe": "2 Peter",
+		"1 Pt": "1 Peter", "1 Ti": "1 Timothy", "2 Ti": "2 Timothy", "1 Co": "1 Corinthians",
+		"2 Co": "2 Corinthians", "1 Sa": "1 Samuel", "2 Ki": "2 Kings", "1 Ch": "1 Chronicles",
+	};
+	for (const [abbr, book] of Object.entries(cases)) {
+		assert.equal(normaliseBook(abbr), book, abbr);
+		assert.deepEqual(tuples(`${abbr} 3:11`), [[`${abbr} 3:11`, book, 3, 11, 3, 11]], abbr);
+	}
+	assert.deepEqual(tuples("1 Jn 3:11, 4:7"), [
+		["1 Jn 3:11", "1 John", 3, 11, 3, 11],
+		["4:7", "1 John", 4, 7, 4, 7],
+	]);
+	// "Jhn" is the one John alias that works alone, so its numbered forms must be keyed too.
+	assert.deepEqual(tuples("2 Jhn 1:1"), [["2 Jhn 1:1", "2 John", 1, 1, 1, 1]]);
+	assert.deepEqual(tuples("1 Jhn 3:11"), [["1 Jhn 3:11", "1 John", 3, 11, 3, 11]]);
+	for (const t of ["2 Jo 3:4", "3 Jo 3:4"]) {
+		assert.deepEqual(tuples(t), [], t);
+	}
+	assert.deepEqual(tuples("Jn 3:11"), [["Jn 3:11", "John", 3, 11, 3, 11]]);
+});
+
+test("Roman numerals and extra spaces keep the book's number", () => {
+	for (const [text, book] of [
+		["I John 3:16", "1 John"], ["I Jn 3:11", "1 John"], ["II Jn 1:1", "2 John"], ["III John 1:4", "3 John"],
+		["1  Jn 3:11", "1 John"], ["II Cor 5:17", "2 Corinthians"], ["I Sam 17:45", "1 Samuel"],
+	]) {
+		assert.deepEqual(tuples(text).map((t) => [t[0], t[1]]), [[text, book]], text);
+	}
+	// The number has to sit on the same line as the name.
+	assert.deepEqual(tuples("Week 2\n\nJohn 1:1"), [["John 1:1", "John", 1, 1, 1, 1]]);
+	assert.deepEqual(tuples("so I\nJohn 3:16"), [["John 3:16", "John", 3, 16, 3, 16]]);
+	assert.equal(normaliseBook("I Jn"), "1 John");
+	assert.equal(normaliseBook("ii samuel"), "2 Samuel");
+});
+
+test("a number never falls back to an unnumbered book", () => {
+	for (const t of ["1 Jon 2:3", "3 Ti 1:2", "2  Jon 1:1", "II Jon 1:1"]) {
+		assert.deepEqual(tuples(t), [], t);
+	}
+	// A lone capital I is usually the pronoun, so the name after it still counts.
+	assert.deepEqual(tuples("Then I Am 5:24"), [["Am 5:24", "Amos", 5, 24, 5, 24]]);
+	assert.deepEqual(tuples("As I Mark 4:3"), [["Mark 4:3", "Mark", 4, 3, 4, 3]]);
+});
+
 test("is, am and mr never make a dotted reference", () => {
 	assert.deepEqual(tuples("Mr. 5:30 said"), []);
 	assert.deepEqual(tuples("I am. 10:30 we start"), []);
@@ -447,6 +507,10 @@ test("hostile verse-only text yields nothing", () => {
 	for (const t of ["Back in Corinthians v.15", "Jude v.3", "Philemon v 10", "3 John v 5"]) {
 		assert.deepEqual(tuples(t, COL), [], t);
 	}
+	for (const t of ["3 Kings v.5", "1 Cor. v.15", "Back in Jude   v.3", "1 Cor.  v 15", "2 Th v.5"]) {
+		assert.deepEqual(tuples(t, COL), [], t);
+	}
+	assert.deepEqual(tuples("x".repeat(100) + " is v.5", COL), [["v.5", "Colossians", 2, 5, 2, 5]]);
 	assert.deepEqual(tuples("is v.5", COL), [["v.5", "Colossians", 2, 5, 2, 5]]);
 	assert.deepEqual(tuples("v 1 John 4:8", COL), [["1 John 4:8", "1 John", 4, 8, 4, 8]]);
 	assert.deepEqual(tuples("v.2 Cor 5:17", COL), [["2 Cor 5:17", "2 Corinthians", 5, 17, 5, 17]]);
@@ -618,6 +682,26 @@ test("a passage the vault can only half serve comes wholly from the download", a
 	assert.deepEqual(flat(rows).slice(0, 2), ["3:2=b3v2", "3:3=b3v3"]);
 	assert.ok(flat(rows).every((r) => /=b\d/.test(r)), "no vault rows mixed in");
 	assert.equal(flat(rows).at(-1), "4:1=b4v1");
+});
+
+test("a slow failed read can't clear a newer download's memo", async () => {
+	setBibleFile("dl20/bsb.txt");
+	let fail;
+	const slow = fakeApp({});
+	slow.vault.adapter.read = () => new Promise((_, reject) => (fail = reject));
+	slow.vault.adapter.exists = async () => true;
+	const stale = bibleStatus(slow);
+	await new Promise((r) => setTimeout(r));
+	setBibleFile("dl21/bsb.txt");
+	let reads = 0;
+	const app = fakeApp({ "dl21/bsb.txt": bibleText() });
+	const read = app.vault.adapter.read;
+	app.vault.adapter.read = async (p) => (reads++, read(p));
+	assert.equal(await bibleStatus(app), "ready");
+	fail(new Error("late"));
+	await stale;
+	assert.equal(await bibleStatus(app), "ready");
+	assert.equal(reads, 1);
 });
 
 test("a damaged download plus a vault miss is not found", async () => {
