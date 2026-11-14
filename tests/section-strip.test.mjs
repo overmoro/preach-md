@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { readHeadingTime, sectionPace, currentSectionIndex } from "./.build/section-strip.mjs";
+import { readHeadingTime, sectionPace, currentSectionIndex, unfoldCallouts } from "./.build/section-strip.mjs";
 
 const accepted = [
 	["Intro (~3 min)", 3, "Intro"],
@@ -111,4 +111,29 @@ test("currentSectionIndex", () => {
 	for (const [tops, line, vh, atBottom, expected] of cases) {
 		assert.equal(currentSectionIndex(tops, line, vh, atBottom), expected, JSON.stringify([tops, atBottom]));
 	}
+});
+
+function fakeEl(classes, parent, onClick) {
+	const el = {
+		parentElement: parent,
+		classList: { contains: (c) => classes.has(c) },
+		closest(sel) {
+			for (let n = this; n; n = n.parentElement) if (n.callout) return n;
+			return null;
+		},
+		querySelector: () => ({ click: onClick }),
+	};
+	return el;
+}
+
+test("unfoldCallouts clicks folded callouts outermost first and skips open ones", () => {
+	const order = [];
+	const outer = fakeEl(new Set(["is-collapsed"]), null, () => order.push("outer"));
+	const mid = fakeEl(new Set(), outer, () => order.push("mid"));
+	const inner = fakeEl(new Set(["is-collapsed"]), mid, () => order.push("inner"));
+	for (const c of [outer, mid, inner]) c.callout = true;
+	const heading = fakeEl(new Set(), inner, () => {});
+	assert.equal(unfoldCallouts(heading), true);
+	assert.deepEqual(order, ["outer", "inner"]);
+	assert.equal(unfoldCallouts(fakeEl(new Set(), null, () => {})), false);
 });

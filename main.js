@@ -1528,6 +1528,18 @@ function sectionHeadingEls(root, level) {
   return Array.from(root.querySelectorAll("h" + level));
 }
 var TEXT_NODE = 3;
+var UNFOLD_MS = 100;
+function unfoldCallouts(el) {
+  var _a, _b, _c;
+  const folded = [];
+  for (let c = (_a = el.parentElement) == null ? void 0 : _a.closest(".callout"); c; c = (_b = c.parentElement) == null ? void 0 : _b.closest(".callout")) {
+    if (c.classList.contains("is-collapsed"))
+      folded.unshift(c);
+  }
+  for (const c of folded)
+    (_c = c.querySelector(".callout-title")) == null ? void 0 : _c.click();
+  return folded.length > 0;
+}
 function lastTextNode(node) {
   var _a;
   for (let n = node.lastChild; n; n = n.previousSibling) {
@@ -1564,6 +1576,7 @@ var SectionStrip = class {
     this.timeline = false;
     this.lastKey = "";
     this.downTarget = null;
+    this.pendingJump = 0;
     this.nav = parent.createEl("nav", {
       cls: "preach-strip preach-strip--hidden",
       attr: { "aria-label": "Sections", "data-ignore-swipe": "true" }
@@ -1575,6 +1588,7 @@ var SectionStrip = class {
     this.downTarget = target;
   }
   build(headings, pacing) {
+    window.clearTimeout(this.pendingJump);
     this.playhead.remove();
     this.nav.empty();
     this.headings = [];
@@ -1608,8 +1622,13 @@ var SectionStrip = class {
         if (e.detail !== 0 && !seg.contains(this.downTarget))
           return;
         (_a2 = this.onJump) == null ? void 0 : _a2.call(this);
+        window.clearTimeout(this.pendingJump);
         const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-        heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+        const go = () => heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+        if (unfoldCallouts(heading))
+          this.pendingJump = window.setTimeout(go, UNFOLD_MS + 100);
+        else
+          go();
       });
       this.segs.push(seg);
     });

@@ -959,6 +959,10 @@ body.preach-md-active.preach-md-active .workspace-tab-header-container {
 	pointer-events: none;
 }
 
+body:not(.is-mobile) .preach-strip {
+	right: var(--scrollbar-width, 12px);
+}
+
 .preach-strip--hidden {
 	display: none;
 }

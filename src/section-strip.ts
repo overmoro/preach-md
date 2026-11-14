@@ -87,6 +87,17 @@ export function sectionHeadingEls(root: HTMLElement, level: number): HTMLElement
 }
 
 const TEXT_NODE = 3;
+const UNFOLD_MS = 100;
+
+/** Unfold, outermost first, every folded callout around `el` via Obsidian's own title click. */
+export function unfoldCallouts(el: HTMLElement): boolean {
+	const folded: HTMLElement[] = [];
+	for (let c = el.parentElement?.closest<HTMLElement>(".callout"); c; c = c.parentElement?.closest<HTMLElement>(".callout")) {
+		if (c.classList.contains("is-collapsed")) folded.unshift(c);
+	}
+	for (const c of folded) c.querySelector<HTMLElement>(".callout-title")?.click();
+	return folded.length > 0;
+}
 
 function lastTextNode(node: Node): Node | null {
 	for (let n = node.lastChild; n; n = n.previousSibling) {
@@ -119,6 +130,7 @@ export class SectionStrip {
 	private timeline = false;
 	private lastKey = "";
 	private downTarget: EventTarget | null = null;
+	private pendingJump = 0;
 
 	constructor(
 		parent: HTMLElement,
@@ -139,6 +151,7 @@ export class SectionStrip {
 	}
 
 	build(headings: HTMLElement[], pacing: boolean): void {
+		window.clearTimeout(this.pendingJump);
 		this.playhead.remove();
 		this.nav.empty();
 		this.headings = [];
@@ -171,8 +184,12 @@ export class SectionStrip {
 				// detail 0: activated without a pointer, e.g. the keyboard
 				if (e.detail !== 0 && !seg.contains(this.downTarget as Node | null)) return;
 				this.onJump?.();
+				window.clearTimeout(this.pendingJump);
 				const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-				heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+				const go = () => heading.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+				// Obsidian toggles on a 0ms timeout, then animates height for 100ms
+				if (unfoldCallouts(heading)) this.pendingJump = window.setTimeout(go, UNFOLD_MS + 100);
+				else go();
 			});
 			this.segs.push(seg);
 		});
